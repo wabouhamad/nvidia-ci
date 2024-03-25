@@ -56,8 +56,10 @@ var (
 	nfdCleanupAfterInstall bool = false
 
 	// NvidiaGPUConfig provides access to general configuration parameters.
-	nvidiaGPUConfig  *nvidiagpuconfig.NvidiaGPUConfig
-	gpuCatalogSource = "undefined"
+	nvidiaGPUConfig        *nvidiagpuconfig.NvidiaGPUConfig
+	gpuScaleCluster        bool = false
+	gpuCatalogSource            = "undefined"
+	gpuSubscriptionChannel      = "undefined"
 )
 
 const (
@@ -93,21 +95,35 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 		nvidiaGPUConfig = nvidiagpuconfig.NewNvidiaGPUConfig()
 
 		BeforeAll(func() {
-			// if gpuinittools.NvidiaGPUConfig.InstanceType == "" {
 			if nvidiaGPUConfig.InstanceType == "" {
-				glog.V(gpuparams.GpuLogLevel).Infof("env variable ECO_HWACCEL_NVIDIAGPU_INSTANCE_TYPE" +
-					" is not set, skipping test")
-				Skip("No instanceType found in environment variables, Skipping test")
+				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE" +
+					" is not set, skipping scaling cluster")
+				gpuScaleCluster = false
+
+			} else {
+				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE"+
+					" is set to '%s', scaling cluster to add a GPU enabled machineset", nvidiaGPUConfig.InstanceType)
+				gpuScaleCluster = true
 			}
 
 			if nvidiaGPUConfig.CatalogSource == "" {
-				glog.V(gpuparams.GpuLogLevel).Infof("env variable ECO_HWACCEL_NVIDIAGPU_CATALOGSOURCE"+
+				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_CATALOGSOURCE"+
 					" is not set, using default GPU catalogsource '%s'", gpuCatalogSourceDefault)
 				gpuCatalogSource = gpuCatalogSourceDefault
 			} else {
 				gpuCatalogSource = nvidiaGPUConfig.CatalogSource
 				glog.V(gpuparams.GpuLogLevel).Infof("GPU catalogsource now set to env variable "+
-					"ECO_HWACCEL_NVIDIAGPU_CATALOGSOURCE value '%s'", gpuCatalogSource)
+					"NVIDIAGPU_CATALOGSOURCE value '%s'", gpuCatalogSource)
+			}
+
+			if nvidiaGPUConfig.SubscriptionChannel == "" {
+				glog.V(gpuparams.GpuLogLevel).Infof("env variable NVIDIAGPU_SUBSCRIPTION_CHANNEL" +
+					" is not set, will deploy latest channel")
+				gpuSubscriptionChannel = "undefined"
+			} else {
+				gpuSubscriptionChannel = nvidiaGPUConfig.SubscriptionChannel
+				glog.V(gpuparams.GpuLogLevel).Infof("GPU Subscription Channel now set to env variable "+
+					"NVIDIAGPU_SUBSCRIPTION_CHANNEL value '%s'", gpuSubscriptionChannel)
 			}
 
 			By("Check if NFD is installed")
@@ -229,9 +245,9 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			glog.V(gpuparams.GpuLogLevel).Infof("The check for Nvidia GPU label returned: %v", gpuNodeFound)
 
-			if !gpuNodeFound {
-				By("Expand the OCP cluster using instanceType from the env variable " +
-					"ECO_HWACCEL_NVIDIAGPU_INSTANCE_TYPE")
+			if !gpuNodeFound && gpuScaleCluster {
+				By("Expand the OCP cluster using machineset instanceType from the env variable " +
+					"NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE")
 
 				var instanceType = nvidiaGPUConfig.InstanceType
 
@@ -310,9 +326,10 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("The gpu packagemanifest name returned: %s",
 				gpuPkgManifestBuilderByCatalog.Object.Name)
 
-			gpuChannel := gpuPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
-			glog.V(gpuparams.GpuLogLevel).Infof("The gpu channel retrieved from packagemanifest is:  %v",
-				gpuChannel)
+			By("Get the GPU Default Channel from Packagemanifest")
+			gpuChannelDefault := gpuPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
+			glog.V(gpuparams.GpuLogLevel).Infof("The default gpu channel retrieved from packagemanifest is:  %v",
+				gpuChannelDefault)
 
 			By("Check if NVIDIA GPU Operator namespace exists, otherwise created it and label it")
 			nsBuilder := namespace.NewBuilder(APIClient, nvidiaGPUNamespace)
@@ -373,7 +390,16 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			subBuilder := olm.NewSubscriptionBuilder(APIClient, gpuSubscriptionName, gpuSubscriptionNamespace,
 				gpuCatalogSource, gpuCatalogSourceNamespace, gpuPackage)
 
-			subBuilder.WithChannel(gpuChannel)
+			if gpuSubscriptionChannel != "undefined" {
+				glog.V(gpuparams.GpuLogLevel).Infof("Setting the subscription channel to: '%s'",
+					gpuSubscriptionChannel)
+				subBuilder.WithChannel(gpuSubscriptionChannel)
+			} else {
+				glog.V(gpuparams.GpuLogLevel).Infof("Setting the subscription channel to default channel: '%s'",
+					gpuChannelDefault)
+				subBuilder.WithChannel(gpuChannelDefault)
+			}
+
 			subBuilder.WithInstallPlanApproval(gpuInstallPlanApproval)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("Creating the subscription, i.e Deploy the GPU operator")

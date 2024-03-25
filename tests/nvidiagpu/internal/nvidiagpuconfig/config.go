@@ -8,8 +8,9 @@ import (
 
 // NvidiaGPUConfig contains environment information related to nvidiagpu tests.
 type NvidiaGPUConfig struct {
-	InstanceType  string `envconfig:"NVIDIAGPU_INSTANCE_TYPE"`
-	CatalogSource string `envconfig:"NVIDIAGPU_CATALOGSOURCE"`
+	InstanceType        string `envconfig:"NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE"`
+	CatalogSource       string `envconfig:"NVIDIAGPU_CATALOGSOURCE"`
+	SubscriptionChannel string `envconfig:"NVIDIAGPU_SUBSCRIPTION_CHANNEL"`
 }
 
 // NewNvidiaGPUConfig returns instance of NvidiaGPUConfig type.
