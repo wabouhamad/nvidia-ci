@@ -2,20 +2,15 @@ package get
 
 import (
 	"fmt"
-	"regexp"
-
+	"github.com/golang/glog"
+	"github.com/openshift-kni/eco-goinfra/pkg/clients"
 	"github.com/openshift-kni/eco-goinfra/pkg/nodes"
 	"github.com/openshift-kni/eco-goinfra/pkg/olm"
 	"github.com/openshift-kni/eco-goinfra/pkg/pod"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-
-	"github.com/golang/glog"
-	"github.com/openshift-kni/eco-goinfra/pkg/clients"
 )
-
-// github.com/rh-ecosystem-edge/nvidia-ci/tests
 
 // InstalledCSVFromSubscription returns installedCSV from Subscription.
 func InstalledCSVFromSubscription(apiClient *clients.Settings, gpuSubscriptionName,
@@ -96,13 +91,4 @@ func GetClusterArchitecture(apiClient *clients.Settings, nodeSelector map[string
 	err = fmt.Errorf("could not find one node with label '%s'", nodeLabel)
 
 	return "", err
-}
-
-func ExtractVersionFromCSV(csv string) string {
-	regex := *regexp.MustCompile(`(v\d+\.\d+\.\d+)`)
-	matches := regex.FindAllString(csv, -1)
-	if len(matches) == 0 {
-		return csv
-	}
-	return matches[0]
 }

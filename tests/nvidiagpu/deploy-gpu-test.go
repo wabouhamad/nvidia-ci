@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidiagpuconfig"
 
@@ -63,7 +62,8 @@ var (
 	cleanupAfterTest              bool = true
 	deployFromBundle              bool = false
 	gpuOperatorBundleImage             = ""
-	gpuCurrentCSVFromSub               = ""
+	gpuCurrentCSV                      = ""
+	gpuCurrentCSVVersion               = ""
 )
 
 const (
@@ -168,6 +168,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By("Report OpenShift version")
 			ocpVersion, err := inittools.GetOpenShiftVersion()
+			glog.V(gpuparams.GpuLogLevel).Infof("Current OpenShift cluster version is: '%s'", ocpVersion)
+
 			if err != nil {
 				glog.Error("Error getting OpenShift version: ", err)
 			} else if err := inittools.GeneralConfig.WriteReport(openShiftVersionFile, []byte(ocpVersion)); err != nil {
@@ -293,7 +295,12 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			glog.V(gpuparams.GpuLogLevel).Infof("The check for Nvidia GPU label returned: %v", gpuNodeFound)
 
-			if !gpuNodeFound && gpuScaleCluster {
+			if !gpuNodeFound && !gpuScaleCluster {
+				glog.V(gpuparams.GpuLogLevel).Infof("Skipping test:  No GPUs were found on any node and flag " +
+					"to scale cluster and add a GPU machineset is set to false")
+				Skip("No GPU labeled worker nodes were found and not scaling current cluster")
+
+			} else if !gpuNodeFound && gpuScaleCluster {
 				By("Expand the OCP cluster using machineset instanceType from the env variable " +
 					"NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE")
 
@@ -353,8 +360,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			// Here we don't need this step is we already have a GPU worker node on cluster
 			if gpuScaleCluster {
-				glog.V(gpuparams.GpuLogLevel).Infof("Sleep for 2 minutes to allow the newly create GPU worker " +
-					"nodes to be labeled by NFD")
+				glog.V(gpuparams.GpuLogLevel).Infof("Sleeping for 2 minutes to allow the newly created GPU " +
+					"worker node to be labeled by NFD")
 				time.Sleep(2 * time.Minute)
 			}
 
@@ -500,9 +507,9 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					createdSub.Object.Name)
 
 				if createdSub.Exists() {
-					glog.V(gpuparams.GpuLogLevel).Infof("The newly created subscription: %s in namespace: %v "+
-						"has current CSV:  %v", createdSub.Object.Name, createdSub.Object.Namespace,
-						createdSub.Definition.Status.CurrentCSV)
+					glog.V(gpuparams.GpuLogLevel).Infof("The newly created subscription '%s' in namespace '%v' "+
+						"has current CSV  '%v'", createdSub.Object.Name, createdSub.Object.Namespace,
+						createdSub.Object.Status.CurrentCSV)
 				}
 
 				defer func() {
@@ -514,7 +521,6 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			}
 
-			// Here we pick up after deploying the GPU bundle (which creates operator-group, subscription, csv, deployment
 			By("Sleep for 2 minutes to allow the GPU Operator deployment to be created")
 			glog.V(gpuparams.GpuLogLevel).Infof("Sleep for 2 minutes to allow the GPU Operator deployment" +
 				" to be created")
@@ -540,51 +546,50 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					gpuOperatorDeployment.Definition.Name)
 			}
 
-			// Need to handle this differently if deployed form bundle
-			if deployFromBundle {
-				By("Get the CSV deployed in NVIDIA GPU Operator Namespace")
-				bundleCSVBuilderList, err := olm.ListClusterServiceVersion(inittools.APIClient, nvidiaGPUNamespace)
-				Expect(err).ToNot(HaveOccurred(), "Error getting list of CSVs in namespace %s"+
-					": %v", nvidiaGPUNamespace, err)
-				// Get the first element in the list - should normally be just one
-				bundleCSVBuilder := bundleCSVBuilderList[0]
-				glog.V(gpuparams.GpuLogLevel).Infof("ClusterServiceVersion deployed from bundle is '%s",
-					bundleCSVBuilder.Definition.Name)
+			By("Get the CSV deployed in NVIDIA GPU Operator namespace")
+			csvBuilderList, err := olm.ListClusterServiceVersion(inittools.APIClient, nvidiaGPUNamespace)
 
-				bundleVersion := fmt.Sprintf("%s(bundle)", bundleCSVBuilder.Definition.Spec.Version.String())
-				if err := inittools.GeneralConfig.WriteReport(operatorVersionFile, []byte(bundleVersion)); err != nil {
-					glog.Error("Error writing an operator version file: ", err)
-				}
-
-				// save the deployed CSVBuilder object
-				gpuCurrentCSVFromSub = bundleCSVBuilder.Definition.Name
-
-			} else {
-				By("Get currentCSV from subscription")
-				gpuCurrentCSVFromSub, err = get.CurrentCSVFromSubscription(inittools.APIClient, gpuSubscriptionName,
-					gpuSubscriptionNamespace)
-				Expect(err).ToNot(HaveOccurred(), "error pulling currentCSV from cluster:  %v", err)
-				Expect(gpuCurrentCSVFromSub).ToNot(BeEmpty())
-				glog.V(gpuparams.GpuLogLevel).Infof("currentCSV %s extracted from Subscripion %s",
-					gpuCurrentCSVFromSub, gpuSubscriptionName)
-				if err := inittools.GeneralConfig.WriteReport(operatorVersionFile, []byte(get.ExtractVersionFromCSV(gpuCurrentCSVFromSub))); err != nil {
-					glog.Error("Error writing an operator version file: ", err)
-				}
+			if err != nil {
+				glog.V(gpuparams.GpuLogLevel).Infof("Error getting list of CSVs in namespace '%s': %v",
+					nvidiaGPUNamespace, err)
 			}
 
-			By("Wait for ClusterServiceVersion to be in Succeeded phase")
-			glog.V(gpuparams.GpuLogLevel).Infof("Waiting for ClusterServiceVersion to be Succeeded phase")
-			err = wait.CSVSucceeded(inittools.APIClient, gpuCurrentCSVFromSub, nvidiaGPUNamespace, 60*time.Second,
+			Expect(err).ToNot(HaveOccurred(), "Error getting list of CSVs in GPU operator "+
+				"namespace: '%v'", err)
+
+			// Get the first element in the list - should normally be just one
+			csvBuilder := csvBuilderList[0]
+
+			gpuCurrentCSV = csvBuilder.Definition.Name
+			glog.V(gpuparams.GpuLogLevel).Infof("Deployed ClusterServiceVersion is: '%s", gpuCurrentCSV)
+
+			gpuCurrentCSVVersion = csvBuilder.Definition.Spec.Version.String()
+			csvVersionString := gpuCurrentCSVVersion
+
+			if deployFromBundle {
+				csvVersionString = fmt.Sprintf("%s(bundle)", csvBuilder.Definition.Spec.Version.String())
+			}
+
+			glog.V(gpuparams.GpuLogLevel).Infof("ClusterServiceVersion version to be written in the operator "+
+				"version file is: '%s'", csvVersionString)
+
+			if err := inittools.GeneralConfig.WriteReport(operatorVersionFile, []byte(csvVersionString)); err != nil {
+				glog.Error("Error writing an operator version file: ", err)
+			}
+
+			By("Wait for deployed ClusterServiceVersion to be in Succeeded phase")
+			glog.V(gpuparams.GpuLogLevel).Infof("Waiting for ClusterServiceVersion '%s' to be in Succeeded phase",
+				gpuCurrentCSV)
+			err = wait.CSVSucceeded(inittools.APIClient, gpuCurrentCSV, nvidiaGPUNamespace, 60*time.Second,
 				5*time.Minute)
-			glog.V(gpuparams.GpuLogLevel).Infof("error waiting for ClusterServiceVersion to be "+
-				"in Succeeded phase:  %v ", err)
+			glog.V(gpuparams.GpuLogLevel).Info("error waiting for ClusterServiceVersion '%s' to be "+
+				"in Succeeded phase:  %v ", gpuCurrentCSV, err)
 			Expect(err).ToNot(HaveOccurred(), "error waiting for ClusterServiceVersion to be "+
-				"in Succeeded phase:  %v ", err)
+				"in Succeeded phase: ", err)
 
 			By("Pull existing CSV in NVIDIA GPU Operator Namespace")
-			clusterCSV, err := olm.PullClusterServiceVersion(inittools.APIClient, gpuCurrentCSVFromSub, nvidiaGPUNamespace)
-			Expect(err).ToNot(HaveOccurred(), "error pulling CSV %v from cluster:  %v",
-				gpuCurrentCSVFromSub, err)
+			clusterCSV, err := olm.PullClusterServiceVersion(inittools.APIClient, gpuCurrentCSV, nvidiaGPUNamespace)
+			Expect(err).ToNot(HaveOccurred(), "error pulling CSV from cluster:  %v", err)
 
 			glog.V(gpuparams.GpuLogLevel).Infof("clusterCSV from cluster lastUpdatedTime is : %v ",
 				clusterCSV.Definition.Status.LastUpdateTime)
@@ -615,7 +620,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			createdClusterPolicyBuilder, err := clusterPolicyBuilder.Create()
 			Expect(err).ToNot(HaveOccurred(), "Error Creating ClusterPolicy from csv "+
 				"almExamples  %v ", err)
-			glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy '%' successfully created",
+			glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy '%s' is successfully created",
 				createdClusterPolicyBuilder.Definition.Name)
 
 			defer func() {
