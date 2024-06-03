@@ -13,7 +13,7 @@ import (
 	time "time"
 
 	glog "github.com/golang/glog"
-	namespace "github.com/openshift-kni/eco-goinfra/pkg/namespace"
+	namespace "github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
 	gomock "go.uber.org/mock/gomock"
 )
 

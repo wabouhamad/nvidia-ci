@@ -5,11 +5,11 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/openshift-kni/eco-goinfra/pkg/clients"
-	"github.com/openshift-kni/eco-goinfra/pkg/deployment"
-	"github.com/openshift-kni/eco-goinfra/pkg/nvidiagpu"
-	"github.com/openshift-kni/eco-goinfra/pkg/olm"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 

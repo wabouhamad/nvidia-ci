@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/openshift-kni/eco-goinfra/pkg/clients"
-	"github.com/openshift-kni/eco-goinfra/pkg/configmap"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/configmap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

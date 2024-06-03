@@ -6,8 +6,8 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/onsi/ginkgo/v2"
-	"github.com/openshift-kni/eco-goinfra/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/config"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilversion "k8s.io/apimachinery/pkg/util/version"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"

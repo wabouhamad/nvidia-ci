@@ -7,9 +7,9 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/kelseyhightower/envconfig"
-	"github.com/openshift-kni/eco-goinfra/pkg/clients"
-	"github.com/openshift-kni/eco-goinfra/pkg/deployment"
-	"github.com/openshift-kni/eco-goinfra/pkg/namespace"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
 	_ "go.uber.org/mock/mockgen/model"
 )
 

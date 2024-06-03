@@ -4,8 +4,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/openshift-kni/eco-goinfra/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/reporter"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"
