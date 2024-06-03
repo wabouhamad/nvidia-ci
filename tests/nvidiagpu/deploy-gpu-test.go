@@ -7,7 +7,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidiagpuconfig"
 
-	"github.com/openshift-kni/eco-goinfra/pkg/machine"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/machine"
 
 	"strings"
 	"time"
@@ -15,12 +15,12 @@ import (
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/openshift-kni/eco-goinfra/pkg/configmap"
-	"github.com/openshift-kni/eco-goinfra/pkg/deployment"
-	"github.com/openshift-kni/eco-goinfra/pkg/namespace"
-	"github.com/openshift-kni/eco-goinfra/pkg/nvidiagpu"
-	"github.com/openshift-kni/eco-goinfra/pkg/olm"
-	"github.com/openshift-kni/eco-goinfra/pkg/pod"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/configmap"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidiagpu"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/pod"
 
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
@@ -738,7 +738,8 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("Creating gpu-burn pod '%s' in namespace '%s'",
 				gpuBurnPodName, gpuBurnNamespace)
 
-			_, err = inittools.APIClient.Pods(gpuBurnPod.Namespace).Create(context.TODO(), gpuBurnPod, metav1.CreateOptions{})
+			_, err = inittools.APIClient.Pods(gpuBurnPod.Namespace).Create(context.TODO(), gpuBurnPod,
+				metav1.CreateOptions{})
 			Expect(err).ToNot(HaveOccurred(), "Error creating gpu-burn '%s' in "+
 				"namespace '%s': %v", gpuBurnPodName, gpuBurnNamespace, err)
 
@@ -791,6 +792,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			Expect(match1 && match2).ToNot(BeFalse(), "gpu-burn pod execution was FAILED")
 			glog.V(gpuparams.GpuLogLevel).Infof("Gpu-burn pod execution was successful")
+
 		})
 	})
 })

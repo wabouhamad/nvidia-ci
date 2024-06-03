@@ -3,11 +3,11 @@ package get
 import (
 	"fmt"
 	"github.com/golang/glog"
-	"github.com/openshift-kni/eco-goinfra/pkg/clients"
-	"github.com/openshift-kni/eco-goinfra/pkg/nodes"
-	"github.com/openshift-kni/eco-goinfra/pkg/olm"
-	"github.com/openshift-kni/eco-goinfra/pkg/pod"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/gpuparams"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nodes"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/pod"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
