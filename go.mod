@@ -1,6 +1,6 @@
 module github.com/rh-ecosystem-edge/nvidia-ci
 
-go 1.20
+go 1.21
 
 replace (
 	github.com/k8snetworkplumbingwg/sriov-network-operator => github.com/openshift/sriov-network-operator v0.0.0-20240228013256-b13485442721 // release-4.15
@@ -72,7 +72,7 @@ require (
 	github.com/containernetworking/cni v1.1.2 // indirect
 	github.com/containers/image/v5 v5.29.2 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/docker/docker v25.0.3+incompatible // indirect
+	github.com/docker/docker v27.1.1+incompatible // indirect
 	github.com/emicklei/go-restful/v3 v3.11.2 // indirect
 	github.com/evanphx/json-patch v5.7.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.8.0 // indirect
