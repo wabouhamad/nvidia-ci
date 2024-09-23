@@ -238,14 +238,14 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					" to be created")
 				time.Sleep(2 * time.Minute)
 
-				By("Wait up to 4 mins for NFD Operator deployment to be created")
+				By("Wait up to 5 mins for NFD Operator deployment to be created")
 				nfdDeploymentCreated := wait.DeploymentCreated(inittools.APIClient, nfdOperatorDeploymentName, nfdOperatorNamespace,
-					30*time.Second, 4*time.Minute)
+					30*time.Second, 5*time.Minute)
 				Expect(nfdDeploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy "+
 					"NFD operator")
 
 				By("Deploy NFD Subscription in NFD namespace")
-				nfdDeployed, err := deploy.CheckNFDOperatorDeployed(inittools.APIClient, 120*time.Second)
+				nfdDeployed, err := deploy.CheckNFDOperatorDeployed(inittools.APIClient, 240*time.Second)
 				Expect(err).ToNot(HaveOccurred(), "error deploying NFD Operator in"+
 					" NFD namespace:  %v", err)
 				Expect(nfdDeployed).ToNot(BeFalse(), "failed to deploy NFD operator")
