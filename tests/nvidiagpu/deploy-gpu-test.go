@@ -244,7 +244,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				Expect(nfdDeploymentCreated).ToNot(BeFalse(), "timed out waiting to deploy "+
 					"NFD operator")
 
-				By("Deploy NFD Subscription in NFD namespace")
+				By("Check if NFD Operator has been deployed")
 				nfdDeployed, err := deploy.CheckNFDOperatorDeployed(inittools.APIClient, 240*time.Second)
 				Expect(err).ToNot(HaveOccurred(), "error deploying NFD Operator in"+
 					" NFD namespace:  %v", err)
