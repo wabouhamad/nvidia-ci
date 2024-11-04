@@ -25,8 +25,6 @@ const (
 	nfdOperatorNamespace                        = "openshift-nfd"
 	nfdOperatorGroupName                        = "nfd-og"
 	nfdSubscriptionName                         = "nfd-subscription"
-	nfdSubscriptionNamespace                    = "openshift-nfd"
-	nfdCatalogSource                            = "redhat-operators"
 	nfdCatalogSourceNamespace                   = "openshift-marketplace"
 	nfdOperatorDeploymentName                   = "nfd-controller-manager"
 	nfdPackage                                  = "nfd"
@@ -105,10 +103,10 @@ func CreateNFDOperatorGroup(apiClient *clients.Settings) error {
 }
 
 // CreateNFDSubscription creates NFD Subscription in NFD namespace.
-func CreateNFDSubscription(apiClient *clients.Settings) error {
+func CreateNFDSubscription(apiClient *clients.Settings, nfdCatalogSource string) error {
 	glog.V(gpuparams.GpuLogLevel).Info("Create Subscription in NFD Operator Namespace")
 
-	nfdSubBuilder := olm.NewSubscriptionBuilder(apiClient, nfdSubscriptionName, nfdSubscriptionNamespace,
+	nfdSubBuilder := olm.NewSubscriptionBuilder(apiClient, nfdSubscriptionName, nfdOperatorNamespace,
 		nfdCatalogSource, nfdCatalogSourceNamespace, nfdPackage)
 
 	nfdSubBuilder.WithChannel(nfdChannel)
@@ -166,7 +164,7 @@ func CheckNFDOperatorDeployed(apiClient *clients.Settings, waitTime time.Duratio
 	glog.V(gpuparams.GpuLogLevel).Infof("Get currentCSV from NFD subscription")
 
 	nfdCurrentCSVFromSub, err := get.CurrentCSVFromSubscription(apiClient, nfdSubscriptionName,
-		nfdSubscriptionNamespace)
+		nfdOperatorNamespace)
 
 	if err != nil {
 		glog.V(gpuparams.GpuLogLevel).Infof("error pulling NFD currentCSV from cluster:  %v", err)
@@ -235,7 +233,7 @@ func DeployCRInstance(apiClient *clients.Settings) error {
 	glog.V(gpuparams.GpuLogLevel).Infof("Get currentCSV from NFD subscription")
 
 	nfdCurrentCSVFromSub, err := get.CurrentCSVFromSubscription(apiClient, nfdSubscriptionName,
-		nfdSubscriptionNamespace)
+		nfdOperatorNamespace)
 
 	if err != nil {
 		glog.V(gpuparams.GpuLogLevel).Infof("Error from getting CurrentCSVFromSubscription:  %v ", err)
@@ -414,7 +412,7 @@ func DeleteNFDSubscription(apiClient *clients.Settings) error {
 	glog.V(gpuparams.GpuLogLevel).Info("Deleting NFD Subscription '%s' in namespace '%s'",
 		nfdSubscriptionName, nfdOperatorNamespace)
 
-	pulledNFDSub, err := olm.PullSubscription(apiClient, nfdSubscriptionName, nfdSubscriptionNamespace)
+	pulledNFDSub, err := olm.PullSubscription(apiClient, nfdSubscriptionName, nfdOperatorNamespace)
 
 	if !pulledNFDSub.Exists() {
 		glog.V(gpuparams.GpuLogLevel).Infof("The NFD Subscription %s does not exist", nfdOperatorGroupName)
@@ -432,7 +430,7 @@ func DeleteNFDCSV(apiClient *clients.Settings) error {
 	glog.V(gpuparams.GpuLogLevel).Infof("Deleting currently installed NFD CSV")
 
 	nfdCurrentCSVFromSub, err := get.CurrentCSVFromSubscription(apiClient, nfdSubscriptionName,
-		nfdSubscriptionNamespace)
+		nfdOperatorNamespace)
 
 	if err != nil {
 		return fmt.Errorf("error trying to get current NFD CSV from subscription '%w'", err)
@@ -467,10 +465,13 @@ func DeleteAnyNFDCSV(apiClient *clients.Settings) error {
 	}
 
 	for _, csv := range csvList.Items {
-		glog.V(gpuparams.GpuLogLevel).Infof("Attempt deleting NFD CSV %s in namespace %s", csv.Name, nfdOperatorNamespace)
-		if err := apiClient.ClusterServiceVersions(nfdOperatorNamespace).Delete(context.TODO(), csv.Name, metav1.DeleteOptions{}); err != nil {
+		glog.V(gpuparams.GpuLogLevel).Infof("Attempt deleting NFD CSV %s in namespace %s", csv.Name,
+			nfdOperatorNamespace)
+		if err := apiClient.ClusterServiceVersions(nfdOperatorNamespace).Delete(context.TODO(), csv.Name,
+			metav1.DeleteOptions{}); err != nil {
 			return err
 		}
 	}
+	
 	return nil
 }
