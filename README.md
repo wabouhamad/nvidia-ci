@@ -54,7 +54,7 @@ In order to enable k8reporter the following needs to be done:
 1. Export DUMP_FAILED_TESTS and set it to true. Use example below
 > export DUMP_FAILED_TESTS=true
 
-2. Specify absolute path for logs directory like it appears below. By default /tmp/reports directory is used.
+2. Specify absolute path for logs directory like it appears below.  By default /tmp/reports directory is used.
 > export REPORTS_DUMP_DIR=/tmp/logs_directory
 
 ## How to run
@@ -71,6 +71,8 @@ Parameters for the script are controlled by the following environment variables:
 - `NVIDIAGPU_DEPLOY_FROM_BUNDLE`: boolean flag to deploy GPU operator from bundle image with operator-sdk - Default value is false - _required when deploying from bundle_
 - `NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL`: specific subscription channel to upgrade to from previous version.  _required when running operator-upgrade testcase_
 - `NVIDIAGPU_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_
+- `NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`: custom certified-operators catalogsource index image for GPU package - _required when deploying fallback custom GPU catalogsource_
+- `NVIDIAGPU_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
 - `TEST_LABELS`: ginkgo query passed to the label-filter option for including/excluding tests - _optional_
 - `VERBOSE_SCRIPT`: prints verbose script information when executing the script - _optional_
 - `TEST_VERBOSE`: executes ginkgo with verbose test output - _optional_
@@ -118,3 +120,18 @@ Executing eco-gotests test-runner script
 scripts/test-runner.sh
 ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nvidia-ci,gpu,operator-upgrade" ./tests/nvidiagpu
 ```
+
+Example running the end-to-end test case and creating custom catalogsources for NFD and GPU Operator packagmanifests 
+when missing from their default catalogsources.
+```
+$ export KUBECONFIG=/path/to/kubeconfig
+$ export DUMP_FAILED_TESTS=true
+$ export REPORTS_DUMP_DIR=/tmp/nvidia-ci-logs-dir
+$ export TEST_FEATURES="nvidiagpu"
+$ export TEST_LABELS='nvidia-ci,gpu'
+$ export TEST_TRACE=true
+$ export VERBOSE_LEVEL=100
+$ export NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE="g4dn.xlarge"
+$ export NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/certified-operator-index:v4.16"
+$ export NVIDIAGPU_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/redhat-operator-index:v4.17"
+$ make run-tests

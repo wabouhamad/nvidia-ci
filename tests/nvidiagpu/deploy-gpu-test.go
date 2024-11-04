@@ -57,23 +57,30 @@ var (
 	nfdCleanupAfterInstall bool = false
 
 	// NvidiaGPUConfig provides access to general configuration parameters.
-	nvidiaGPUConfig               *nvidiagpuconfig.NvidiaGPUConfig
-	gpuScaleCluster               bool = false
-	gpuCatalogSource                   = "undefined"
-	gpuSubscriptionChannel             = "undefined"
-	gpuDefaultSubscriptionChannel      = "undefined"
-	gpuOperatorUpgradeToChannel        = "undefined"
-	cleanupAfterTest              bool = true
-	deployFromBundle              bool = false
-	gpuOperatorBundleImage             = ""
-	gpuCurrentCSV                      = ""
-	gpuCurrentCSVVersion               = ""
-	clusterArchitecture                = "undefined"
+	nvidiaGPUConfig                  *nvidiagpuconfig.NvidiaGPUConfig
+	gpuScaleCluster                  bool = false
+	gpuCatalogSource                      = "undefined"
+	nfdCatalogSource                      = "undefined"
+	gpuCustomCatalogSource                = "undefined"
+	nfdCustomCatalogSource                = "undefined"
+	createGPUCustomCatalogsource     bool = false
+	createNFDCustomCatalogsource     bool = false
+	gpuCustomCatalogsourceIndexImage      = "undefined"
+	nfdCustomCatalogsourceIndexImage      = "undefined"
+	gpuSubscriptionChannel                = "undefined"
+	gpuDefaultSubscriptionChannel         = "undefined"
+	gpuOperatorUpgradeToChannel           = "undefined"
+	cleanupAfterTest                 bool = true
+	deployFromBundle                 bool = false
+	gpuOperatorBundleImage                = ""
+	gpuCurrentCSV                         = ""
+	gpuCurrentCSVVersion                  = ""
+	clusterArchitecture                   = "undefined"
 )
 
 const (
 	nfdOperatorNamespace      = "openshift-nfd"
-	nfdCatalogSource          = "redhat-operators"
+	nfdCatalogSourceDefault   = "redhat-operators"
 	nfdCatalogSourceNamespace = "openshift-marketplace"
 	nfdOperatorDeploymentName = "nfd-controller-manager"
 	nfdPackage                = "nfd"
@@ -98,6 +105,12 @@ const (
 	gpuBurnPodLabel                     = "app=gpu-burn-app"
 	gpuBurnConfigmapName                = "gpu-burn-entrypoint"
 	gpuOperatorDefaultMasterBundleImage = "registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle:main-latest"
+
+	gpuCustomCatalogSourcePublisherName    = "Red Hat"
+	nfdCustomNFDCatalogSourcePublisherName = "Red Hat"
+
+	gpuCustomCatalogSourceDisplayName = "Certified Operators Custom"
+	nfdCustomCatalogSourceDisplayName = "Redhat Operators Custom"
 )
 
 var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
@@ -181,6 +194,50 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 					"NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL value '%s'", gpuOperatorUpgradeToChannel)
 			}
 
+			if nvidiaGPUConfig.GPUFallbackCatalogsourceIndexImage != "" {
+				glog.V(gpuparams.GpuLogLevel).Infof("env variable "+
+					"NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE is set, and has value: '%s'",
+					nvidiaGPUConfig.GPUFallbackCatalogsourceIndexImage)
+
+				gpuCustomCatalogsourceIndexImage = nvidiaGPUConfig.GPUFallbackCatalogsourceIndexImage
+
+				glog.V(gpuparams.GpuLogLevel).Infof("Setting flag to create custom GPU operator catalogsource" +
+					" from fall back index image to True")
+
+				createGPUCustomCatalogsource = true
+
+				gpuCustomCatalogSource = gpuCatalogSourceDefault + "-custom"
+				glog.V(gpuparams.GpuLogLevel).Infof("Setting custom GPU catalogsource name to '%s'",
+					gpuCustomCatalogSource)
+
+			} else {
+				glog.V(gpuparams.GpuLogLevel).Infof("Setting flag to create custom GPU operator catalogsource" +
+					" from fall back index image to False")
+				createGPUCustomCatalogsource = false
+			}
+
+			if nvidiaGPUConfig.NFDFallbackCatalogsourceIndexImage != "" {
+				glog.V(gpuparams.GpuLogLevel).Infof("env variable "+
+					"NVIDIAGPU_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE is set, and has value: '%s'",
+					nvidiaGPUConfig.NFDFallbackCatalogsourceIndexImage)
+
+				nfdCustomCatalogsourceIndexImage = nvidiaGPUConfig.NFDFallbackCatalogsourceIndexImage
+
+				glog.V(gpuparams.GpuLogLevel).Infof("Setting flag to create custom NFD operator catalogsource" +
+					" from fall back index image to True")
+
+				createNFDCustomCatalogsource = true
+
+				nfdCustomCatalogSource = nfdCatalogSourceDefault + "-custom"
+				glog.V(gpuparams.GpuLogLevel).Infof("Setting custom NFD catalogsource name to '%s'",
+					nfdCustomCatalogSource)
+
+			} else {
+				glog.V(gpuparams.GpuLogLevel).Infof("Setting flag to create custom NFD operator catalogsource" +
+					" from fall back index image to False")
+				createNFDCustomCatalogsource = false
+			}
+
 			By("Report OpenShift version")
 			ocpVersion, err := inittools.GetOpenShiftVersion()
 			glog.V(gpuparams.GpuLogLevel).Infof("Current OpenShift cluster version is: '%s'", ocpVersion)
@@ -204,22 +261,68 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 				nfdCleanupAfterInstall = true
 
-				By("Check if 'nfd' packagemanifest exists in 'redhat-operators' catalog")
+				By("Check if 'nfd' packagemanifest exists in 'redhat-operators' default catalog")
 				nfdPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
-					nfdPackage, nfdCatalogSourceNamespace, nfdCatalogSource)
-				Expect(err).ToNot(HaveOccurred(), "error getting NFD packagemanifest %s "+
-					"from catalog %s:  %v", nfdPackage, nfdCatalogSource, err)
+					nfdPackage, nfdCatalogSourceNamespace, nfdCatalogSourceDefault)
 
 				if nfdPkgManifestBuilderByCatalog == nil {
-					Skip("NFD packagemanifest not found in catalogsource")
+					glog.V(gpuparams.GpuLogLevel).Infof("NFD packagemanifest was not found in the default '%s'"+
+						" catalog.", nfdCatalogSourceDefault)
+
+					if createNFDCustomCatalogsource {
+						glog.V(gpuparams.GpuLogLevel).Infof("Creating custom catalogsource '%s' for NFD "+
+							"catalog.", nfdCustomCatalogSource)
+						glog.V(gpuparams.GpuLogLevel).Infof("Creating custom catalogsource '%s' for NFD "+
+							"Operator with index image '%s'", nfdCustomCatalogSource, nfdCustomCatalogsourceIndexImage)
+
+						nfdCustomCatalogSourceBuilder := olm.NewCatalogSourceBuilderWithIndexImage(inittools.APIClient,
+							nfdCustomCatalogSource, nfdCatalogSourceNamespace, nfdCustomCatalogsourceIndexImage,
+							nfdCustomCatalogSourceDisplayName, nfdCustomNFDCatalogSourcePublisherName)
+
+						Expect(nfdCustomCatalogSourceBuilder).ToNot(BeNil(), "error creating custom "+
+							"NFD catalogsource %s:  %v", nfdPackage, nfdCustomCatalogSource, err)
+
+						createdNFDCustomCatalogSourceBuilder, err := nfdCustomCatalogSourceBuilder.Create()
+						Expect(err).ToNot(HaveOccurred(), "error creating custom NFD "+
+							"catalogsource '%s':  %v", nfdPackage, nfdCustomCatalogSource, err)
+
+						Expect(createdNFDCustomCatalogSourceBuilder).ToNot(BeNil(), "Failed to "+
+							" create custom NFD catalogsource '%s'", nfdCustomCatalogSource)
+
+						By("Sleep for 30 seconds to allow the NFD custom catalogsource to be created")
+						time.Sleep(30 * time.Second)
+
+						glog.V(gpuparams.GpuLogLevel).Infof("Wait up to 4 mins for custom NFD catalogsource "+
+							"'%s' to be ready", createdNFDCustomCatalogSourceBuilder.Definition.Name)
+
+						Expect(createdNFDCustomCatalogSourceBuilder.IsReady(4 * time.Minute)).NotTo(BeFalse())
+
+						nfdPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
+							nfdPackage, nfdCatalogSourceNamespace, nfdCustomCatalogSource)
+
+						Expect(err).ToNot(HaveOccurred(), "error getting NFD packagemanifest '%s' "+
+							"from custom catalog '%s':  %v", nfdPackage, nfdCustomCatalogSource, err)
+
+						nfdCatalogSource = nfdCustomCatalogSource
+						nfdChannel := nfdPkgManifestBuilderByCustomCatalog.Object.Status.DefaultChannel
+						glog.V(gpuparams.GpuLogLevel).Infof("NFD channel '%s' retrieved from packagemanifest "+
+							"of custom catalogsource '%s'", nfdChannel, nfdCustomCatalogSource)
+
+					} else {
+						Skip("NFD packagemanifest not found in default 'redhat-operators' catalogsource, " +
+							"and flag to deploy custom catalogsource is false")
+					}
+
+				} else {
+					glog.V(gpuparams.GpuLogLevel).Infof("The nfd packagemanifest '%s' was found in the default"+
+						" catalog '%s'", nfdPkgManifestBuilderByCatalog.Object.Name, nfdCatalogSourceDefault)
+
+					nfdCatalogSource = nfdCatalogSourceDefault
+					nfdChannel := nfdPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
+					glog.V(gpuparams.GpuLogLevel).Infof("The NFD channel retrieved from packagemanifest is:  %v",
+						nfdChannel)
+
 				}
-
-				glog.V(gpuparams.GpuLogLevel).Infof("The nfd packagemanifest name returned: %s",
-					nfdPkgManifestBuilderByCatalog.Object.Name)
-
-				nfdChannel := nfdPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
-				glog.V(gpuparams.GpuLogLevel).Infof("The NFD channel retrieved from packagemanifest is:  %v",
-					nfdChannel)
 
 				By("Deploy NFD Operator in NFD namespace")
 				err = deploy.CreateNFDNamespace(inittools.APIClient)
@@ -398,21 +501,83 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			} else {
 				glog.V(gpuparams.GpuLogLevel).Infof("Deploying GPU operator from catalogsource")
 
-				By("Check if 'gpu-operator-certified' packagemanifest exists in GPU catalog")
-				glog.V(gpuparams.GpuLogLevel).Infof("Using GPU catalogsource '%s'", gpuCatalogSource)
+				By("Check if GPU packagemanifest exists in default GPU catalog")
+				glog.V(gpuparams.GpuLogLevel).Infof("Using default GPU catalogsource '%s'",
+					gpuCatalogSourceDefault)
 
 				gpuPkgManifestBuilderByCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
-					gpuPackage, gpuCatalogSourceNamespace, gpuCatalogSource)
-				Expect(err).ToNot(HaveOccurred(), "error getting GPU packagemanifest %s from catalog %s:"+
-					"  %v", gpuPackage, gpuCatalogSource, err)
+					gpuPackage, gpuCatalogSourceNamespace, gpuCatalogSourceDefault)
 
-				glog.V(gpuparams.GpuLogLevel).Infof("The gpu packagemanifest name returned: %s",
-					gpuPkgManifestBuilderByCatalog.Object.Name)
+				if err != nil {
+					glog.V(gpuparams.GpuLogLevel).Infof("Error trying to pull GPU packagemanifest '%s' from"+
+						" default catalog '%s': '%v'", gpuPackage, gpuCatalogSourceDefault, err.Error())
+				}
 
-				By("Get the GPU Default Channel from Packagemanifest")
-				gpuDefaultSubscriptionChannel = gpuPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
-				glog.V(gpuparams.GpuLogLevel).Infof("The default gpu channel retrieved from packagemanifest is:  %v",
-					gpuDefaultSubscriptionChannel)
+				if gpuPkgManifestBuilderByCatalog == nil {
+					glog.V(gpuparams.GpuLogLevel).Infof("The GPU packagemanifest '%s' was not "+
+						"found in the default '%s' catalog", gpuPackage, gpuCatalogSourceDefault)
+
+					if createGPUCustomCatalogsource {
+						glog.V(gpuparams.GpuLogLevel).Infof("Creating custom catalogsource '%s' for GPU Operator, "+
+							"with index image '%s'", gpuCustomCatalogSource, gpuCustomCatalogsourceIndexImage)
+
+						glog.V(gpuparams.GpuLogLevel).Infof("Deploying a custom GPU catalogsource '%s' with '%s' "+
+							"index image", gpuCustomCatalogSource, gpuCustomCatalogsourceIndexImage)
+
+						gpuCustomCatalogSourceBuilder := olm.NewCatalogSourceBuilderWithIndexImage(inittools.APIClient,
+							gpuCustomCatalogSource, gpuCatalogSourceNamespace, gpuCustomCatalogsourceIndexImage,
+							gpuCustomCatalogSourceDisplayName, gpuCustomCatalogSourcePublisherName)
+
+						Expect(gpuCustomCatalogSourceBuilder).NotTo(BeNil(), "Failed to Initialize "+
+							"CatalogSourceBuilder for custom GPU catalogsource '%s'", gpuCustomCatalogSource)
+
+						createdGPUCustomCatalogSourceBuilder, err := gpuCustomCatalogSourceBuilder.Create()
+						glog.V(gpuparams.GpuLogLevel).Infof("Creating custom GPU Catalogsource builder object "+
+							"'%s'", createdGPUCustomCatalogSourceBuilder.Definition.Name)
+						Expect(err).ToNot(HaveOccurred(), "error creating custom GPU catalogsource "+
+							"builder Object name %s:  %v", gpuCustomCatalogSource, err)
+
+						By("Sleep for 30 seconds to allow the GPU custom catalogsource to be created")
+						time.Sleep(30 * time.Second)
+
+						glog.V(gpuparams.GpuLogLevel).Infof("Wait up to 4 mins for custom GPU catalogsource " +
+							"to be ready")
+
+						Expect(createdGPUCustomCatalogSourceBuilder.IsReady(4 * time.Minute)).NotTo(BeFalse())
+
+						gpuCatalogSource = createdGPUCustomCatalogSourceBuilder.Definition.Name
+
+						glog.V(gpuparams.GpuLogLevel).Infof("Custom GPU catalogsource '%s' is now ready",
+							createdGPUCustomCatalogSourceBuilder.Definition.Name)
+
+						gpuPkgManifestBuilderByCustomCatalog, err := olm.PullPackageManifestByCatalog(inittools.APIClient,
+							gpuPackage, gpuCatalogSourceNamespace, gpuCustomCatalogSource)
+
+						Expect(err).ToNot(HaveOccurred(), "error getting GPU packagemanifest '%s' "+
+							"from custom catalog '%s':  %v", gpuPackage, gpuCustomCatalogSource, err)
+
+						By("Get the GPU Default Channel from Packagemanifest")
+						gpuDefaultSubscriptionChannel = gpuPkgManifestBuilderByCustomCatalog.Object.Status.DefaultChannel
+						glog.V(gpuparams.GpuLogLevel).Infof("GPU channel '%s' retrieved from packagemanifest "+
+							"of custom catalogsource '%s'", gpuDefaultSubscriptionChannel, gpuCustomCatalogSource)
+
+					} else {
+						Skip("gpu-operator-certified packagemanifest not found in default 'certified-operators'" +
+							"catalogsource, and flag to deploy custom GPU catalogsource is false")
+					}
+
+				} else {
+					glog.V(gpuparams.GpuLogLevel).Infof("GPU packagemanifest '%s' was found in the default"+
+						" catalog '%s'", gpuPkgManifestBuilderByCatalog.Object.Name, gpuCatalogSourceDefault)
+
+					gpuCatalogSource = gpuCatalogSourceDefault
+
+					By("Get the GPU Default Channel from Packagemanifest")
+					gpuDefaultSubscriptionChannel = gpuPkgManifestBuilderByCatalog.Object.Status.DefaultChannel
+					glog.V(gpuparams.GpuLogLevel).Infof("GPU channel '%s' was retrieved from GPU packagemanifest",
+						gpuDefaultSubscriptionChannel)
+				}
+
 			}
 
 			By("Check if NVIDIA GPU Operator namespace exists, otherwise created it and label it")
@@ -741,7 +906,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By("Deploy gpu-burn pod in test-gpu-burn namespace")
 			glog.V(gpuparams.GpuLogLevel).Infof("gpu-burn pod image name is: '%s', in namespace '%s'",
-				gpuBurnImageName[clusterArchitecture])
+				gpuBurnImageName[clusterArchitecture], gpuBurnNamespace)
 
 			gpuBurnPod, err := gpuburn.CreateGPUBurnPod(inittools.APIClient, gpuBurnPodName, gpuBurnNamespace,
 				gpuBurnImageName[(clusterArchitecture)], 5*time.Minute)
@@ -1047,7 +1212,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 func createNFDDeployment() bool {
 
 	By("Deploy NFD Subscription in NFD namespace")
-	err := deploy.CreateNFDSubscription(inittools.APIClient)
+	err := deploy.CreateNFDSubscription(inittools.APIClient, nfdCatalogSource)
 	Expect(err).ToNot(HaveOccurred(), "error creating NFD Subscription:  %v", err)
 
 	By("Sleep for 2 minutes to allow the NFD Operator deployment to be created")

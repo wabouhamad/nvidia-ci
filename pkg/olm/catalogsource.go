@@ -3,6 +3,8 @@ package olm
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"time"
 
 	"github.com/golang/glog"
 	oplmV1alpha1 "github.com/operator-framework/api/pkg/operators/v1alpha1"
@@ -50,6 +52,62 @@ func NewCatalogSourceBuilder(apiClient *clients.Settings, name, nsname string) *
 		glog.V(100).Infof("The nsname of the catalogsource is empty")
 
 		builder.errorMsg = "catalogsource 'nsname' cannot be empty"
+	}
+
+	return &builder
+}
+
+// NewCatalogSourceBuilderWithIndexImage creates new instance of CatalogSourceBuilder.
+func NewCatalogSourceBuilderWithIndexImage(apiClient *clients.Settings,
+	name, nsname, indexImage, displayName, publisher string) *CatalogSourceBuilder {
+	glog.V(100).Infof("Initializing new catalogsource structure with "+
+		"name '%s', namespace '%s', index image '%s', display name '%s', and publisher '%s'",
+		name, nsname, indexImage, displayName, publisher)
+
+	builder := CatalogSourceBuilder{
+		apiClient: apiClient,
+		Definition: &oplmV1alpha1.CatalogSource{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: nsname,
+			},
+			Spec: oplmV1alpha1.CatalogSourceSpec{
+				SourceType:  oplmV1alpha1.SourceTypeGrpc,
+				Image:       indexImage,
+				DisplayName: displayName,
+				Publisher:   publisher,
+			},
+		},
+	}
+
+	if name == "" {
+		glog.V(100).Infof("The name of the catalogsource is empty")
+
+		builder.errorMsg = "catalogsource 'name' cannot be empty"
+	}
+
+	if nsname == "" {
+		glog.V(100).Infof("The nsname of the catalogsource is empty")
+
+		builder.errorMsg = "catalogsource 'nsname' cannot be empty"
+	}
+
+	if nsname == "" {
+		glog.V(100).Infof("The nsname of the catalogsource is empty")
+
+		builder.errorMsg = "catalogsource 'nsname' cannot be empty"
+	}
+
+	if displayName == "" {
+		glog.V(100).Infof("The display name of the catalogsource is empty")
+
+		builder.errorMsg = "catalogsource 'display' cannot be empty"
+	}
+
+	if publisher == "" {
+		glog.V(100).Infof("The publisher of the catalogsource is empty")
+
+		builder.errorMsg = "catalogsource 'publisher' cannot be empty"
 	}
 
 	return &builder
@@ -146,6 +204,39 @@ func (builder *CatalogSourceBuilder) Delete() error {
 	builder.Object = nil
 
 	return err
+}
+
+// IsReady periodically checks if catalogsource is in Ready state.
+func (builder *CatalogSourceBuilder) IsReady(timeout time.Duration) bool {
+	if valid, _ := builder.validate(); !valid {
+		return false
+	}
+
+	glog.V(100).Infof("Running periodic check until catalogsource '%s' in namespace '%s' is ready",
+		builder.Definition.Name, builder.Definition.Namespace)
+
+	if !builder.Exists() {
+		return false
+	}
+
+	err := wait.PollUntilContextTimeout(
+		context.TODO(), time.Second, timeout, true, func(ctx context.Context) (bool, error) {
+			var err error
+			builder.Object, err = builder.apiClient.CatalogSources(builder.Definition.Namespace).Get(
+				context.TODO(), builder.Definition.Name, metav1.GetOptions{})
+
+			if err != nil {
+				return false, err
+			}
+
+			if builder.Object.Status.GRPCConnectionState.LastObservedState == "READY" {
+				return true, nil
+			}
+
+			return false, nil
+		})
+
+	return err == nil
 }
 
 // validate will check that the builder and builder definition are properly initialized before
