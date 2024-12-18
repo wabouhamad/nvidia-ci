@@ -30,7 +30,7 @@ func ClusterPolicyReady(apiClient *clients.Settings, clusterPolicyName string, p
 				glog.V(gpuparams.GpuLogLevel).Infof("ClusterPolicy %s in now in %s state",
 					clusterPolicy.Object.Name, clusterPolicy.Object.Status.State)
 
-				// this exists out of the wait.PollImmediate()
+				// this exits out of the PollUntilContextTimeout()
 				return true, nil
 			}
 
