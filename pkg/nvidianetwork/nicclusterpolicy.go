@@ -67,7 +67,7 @@ func NewBuilderFromObjectString(apiClient *clients.Settings, almExample string) 
 	if builder.Definition == nil {
 		glog.V(100).Infof("The NicClusterPolicy object definition is nil")
 
-		builder.errorMsg = "ClusterPolicy 'Object.Definition' is nil"
+		builder.errorMsg = "NicClusterPolicy 'Object.Definition' is nil"
 	}
 
 	return &builder
