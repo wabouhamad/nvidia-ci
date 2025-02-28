@@ -10,9 +10,9 @@
         "gpu_operator_staging_digest:\\s*\"(?<currentDigest>sha256:[a-f0-9]+)\""
       ],
       "datasourceTemplate": "docker",
-      "depNameTemplate": "registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle",
+      "depNameTemplate": "ghcr.io/nvidia/gpu-operator/gpu-operator-bundle",
       "currentValueTemplate": "main-latest",
-      "registryUrlTemplate": "https://registry.gitlab.com"
+      "registryUrlTemplate": "https://ghcr.io"
     },
     {
       "description": "Manage NVIDIA GPU Operator Docker image versions for minors 24.6, 24.9, and 24.12",
