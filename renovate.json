@@ -72,7 +72,7 @@
       "description": "Set PR notes for stable OpenShift version updates",
       "matchPackageNames": ["openshift-release-dev/ocp-release"],
       "matchDepPatterns": ["^ocp-(?<minor>12|13|14|15|16|17|18|19|20|21)$"],
-      "prBodyNotes": ["/test 4.{{replace 'ocp-rc-' '' depName}}-stable-nvidia-gpu-operator-e2e-master 4.{{replace 'ocp-rc-' '' depName}}-stable-nvidia-gpu-operator-e2e-24-9-x 4.{{replace 'ocp-rc-' '' depName}}-stable-nvidia-gpu-operator-e2e-24-6-x"]
+      "prBodyNotes": ["/test 4.{{replace 'ocp-' '' depName}}-stable-nvidia-gpu-operator-e2e-master 4.{{replace 'ocp-' '' depName}}-stable-nvidia-gpu-operator-e2e-24-9-x 4.{{replace 'ocp-' '' depName}}-stable-nvidia-gpu-operator-e2e-24-6-x"]
     },
     {
       "description": "Set PR notes for OpenShift RC updates",
