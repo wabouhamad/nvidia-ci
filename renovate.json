@@ -30,7 +30,7 @@
       "description": "Manage stable OpenShift versions (4.12–4.20)",
       "fileMatch": ["^versions\\.yaml$"],
       "matchStrings": [
-        "ocp-4\\.(?<minor>12|13|14|15|16|17|18|19|20):\\s*\"(?<currentValue>.*?)\""
+        "ocp-4\\.(?<minor>12|14|15|16|17|18|19|20|21|22):\\s*\"(?<currentValue>.*?)\""
       ],
       "datasourceTemplate": "docker",
       "registryUrlTemplate": "https://quay.io",
@@ -42,7 +42,7 @@
       "description": "Manage existing OpenShift release candidate (RC) versions (4.18–4.20)",
       "fileMatch": ["^versions\\.yaml$"],
       "matchStrings": [
-        "ocp-rc-4\\.(?<minor>18|19|20|21):\\s*\"(?<currentValue>.*?)\""
+        "ocp-rc-4\\.(?<minor>18|19|20|21|22|23):\\s*\"(?<currentValue>.*?)\""
       ],
       "datasourceTemplate": "docker",
       "registryUrlTemplate": "https://quay.io",
@@ -71,13 +71,13 @@
     {
       "description": "Set PR notes for stable OpenShift version updates",
       "matchPackageNames": ["openshift-release-dev/ocp-release"],
-      "matchDepPatterns": ["^ocp-(?<minor>12|13|14|15|16|17|18|19|20|21)$"],
+      "matchDepPatterns": ["^ocp-(?<minor>12|14|15|16|17|18|19|20|21|22)$"],
       "prBodyNotes": ["/test 4.{{replace 'ocp-' '' depName}}-stable-nvidia-gpu-operator-e2e-master 4.{{replace 'ocp-' '' depName}}-stable-nvidia-gpu-operator-e2e-24-9-x 4.{{replace 'ocp-' '' depName}}-stable-nvidia-gpu-operator-e2e-24-6-x"]
     },
     {
       "description": "Set PR notes for OpenShift RC updates",
       "matchPackageNames": ["openshift-release-dev/ocp-release"],
-      "matchDepPatterns": ["ocp-rc-(?<minor>18|19|20|21)"],
+      "matchDepPatterns": ["ocp-rc-(?<minor>19|20|21|22|23)"],
       "prBodyNotes": ["/test 4.{{replace 'ocp-rc-' '' depName}}-stable-nvidia-gpu-operator-e2e-master 4.{{replace 'ocp-rc-' '' depName}}-stable-nvidia-gpu-operator-e2e-24-9-x 4.{{replace 'ocp-rc-' '' depName}}-stable-nvidia-gpu-operator-e2e-24-6-x"]
     }
   ],
