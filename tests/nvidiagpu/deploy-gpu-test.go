@@ -105,7 +105,7 @@ const (
 	gpuBurnPodName                      = "gpu-burn-pod"
 	gpuBurnPodLabel                     = "app=gpu-burn-app"
 	gpuBurnConfigmapName                = "gpu-burn-entrypoint"
-	gpuOperatorDefaultMasterBundleImage = "registry.gitlab.com/nvidia/kubernetes/gpu-operator/staging/gpu-operator-bundle:main-latest"
+	gpuOperatorDefaultMasterBundleImage = "ghcr.io/nvidia/gpu-operator/gpu-operator-bundle:main-latest"
 
 	gpuCustomCatalogSourcePublisherName    = "Red Hat"
 	nfdCustomNFDCatalogSourcePublisherName = "Red Hat"
