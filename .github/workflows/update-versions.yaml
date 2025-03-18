@@ -11,6 +11,7 @@ on:
         type: string
 jobs:
   ocp-version:
+    if: github.event_name != 'schedule' || github.repository == 'rh-ecosystem-edge/nvidia-ci' || vars.VERSION_UPDATE_FLOW_ENABLE_SCHEDULED == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out the Repo
@@ -53,6 +54,6 @@ jobs:
 
             Update the NVIDIA GPU operator on OpenShift test matrix
             ---
-            /cc @empovit @TomerNewman
+            ${{ vars.VERSION_UPDATE_FLOW_NOTIFY_USERS }}
           delete-branch: true
-          assignees: empovit,TomerNewman
+          assignees: ${{ vars.VERSION_UPDATE_FLOW_ASSIGNEES }}
