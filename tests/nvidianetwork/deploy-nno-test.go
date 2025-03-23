@@ -2,9 +2,13 @@ package nvidianetwork
 
 import (
 	"encoding/json"
+
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidianetworkconfig"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfdcheck"
+
+	"os"
+	"time"
 
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"
@@ -13,8 +17,6 @@ import (
 	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
-	"os"
-	"time"
 
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
@@ -589,7 +591,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			By("Pull the NicClusterPolicy just created from cluster, with updated fields")
 			pulledNicClusterPolicy, err := nvidianetwork.PullNicClusterPolicy(inittools.APIClient,
 				nnoNicClusterPolicyName)
-			Expect(err).ToNot(HaveOccurred(), "error pulling ClusterPolicy %s from cluster: "+
+			Expect(err).ToNot(HaveOccurred(), "error pulling NicClusterPolicy %s from cluster: "+
 				" %v ", nnoNicClusterPolicyName, err)
 
 			cpJSON, err := json.MarshalIndent(pulledNicClusterPolicy, "", " ")
@@ -661,7 +663,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			By("Pull the MacvlanNetwork just created from cluster, with updated fields")
 			pulledMacvlanNetwork, err := nvidianetwork.PullMacvlanNetwork(inittools.APIClient,
 				nnoMacvlanNetworkName)
-			Expect(err).ToNot(HaveOccurred(), "error pulling ClusterPolicy %s from cluster: "+
+			Expect(err).ToNot(HaveOccurred(), "error pulling MacvlanNetwork %s from cluster: "+
 				" %v ", nnoMacvlanNetworkName, err)
 
 			mvnJSON, err := json.MarshalIndent(pulledMacvlanNetwork, "", " ")
