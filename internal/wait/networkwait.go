@@ -2,8 +2,9 @@ package wait
 
 import (
 	"context"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidianetwork"
 	"time"
+
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nvidianetwork"
 
 	"github.com/golang/glog"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/networkparams"
@@ -50,7 +51,7 @@ func MacvlanNetworkReady(apiClient *clients.Settings, macvlanNetworkName string,
 			glog.V(networkparams.LogLevel).Infof("MacvlanNetwork %s in now in %s state",
 				macVlanNetwork.Object.Name, macVlanNetwork.Object.Status.State)
 
-			// returns true, nil when NicClusterPolicy is ready, this exits out of the PollUntilContextTimeout()
+			// returns true, nil when MacvlanNetwork is ready, this exits out of the PollUntilContextTimeout()
 			return macVlanNetwork.Object.Status.State == networkoperator.StateReady, nil
 		})
 }
