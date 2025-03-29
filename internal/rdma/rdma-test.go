@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,8 +13,6 @@ import (
 	"github.com/golang/glog"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,7 +24,8 @@ var (
 )
 
 // CreateRdmaWorkloadPod create RDMA worker pod.
-func CreateRdmaWorkloadPod(clientset *clients.Settings, name, namespace, withCuda, mode, hostname, device, crName, image, serverIP string) (*v1.Pod, error) {
+func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, crName,
+	image, serverIP string) *corev1.Pod {
 
 	var args []string
 
@@ -74,16 +74,17 @@ func CreateRdmaWorkloadPod(clientset *clients.Settings, name, namespace, withCud
 		},
 	}
 
-	return clientset.Pods(namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
+	return pod
 }
 
 func boolPtr(b bool) *bool {
 	return &b
 }
 
-// GetServerIP retrieve pod ip.
-func GetServerIP(clientset *clients.Settings, podName string, podinterface string) (string, error) {
-	pod, err := clientset.Pods("default").Get(context.TODO(), podName, metav1.GetOptions{})
+// GetMyServerIP retrieve pod interface ip.
+func GetMyServerIP(clientset *clients.Settings, podName, podNamespace, podinterface string) (string, error) {
+	pod, err := clientset.Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{})
+	// pod, err := apiClient.Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to get pod: %v", err)
 	}
@@ -172,6 +173,7 @@ func ParseRdmaOutput(output string) (map[string]string, error) {
 
 func GetPodLogs(clientset *clients.Settings, namespace, podName string) (string, error) {
 	req := clientset.Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{})
+	// req := apiClient.Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{})
 	logStream, err := req.Stream(context.TODO())
 	if err != nil {
 		return "", fmt.Errorf("error opening log stream: %v", err)
@@ -193,32 +195,32 @@ func GetPodLogs(clientset *clients.Settings, namespace, podName string) (string,
 	return logs.String(), nil
 }
 
-// ValidateRDMAResults basic validtion for rdma tests result.
-func ValidateRDMAResults(results map[string]string) error {
+// ValidateRDMAResults basic validation for rdma tests result.
+func ValidateRDMAResults(results map[string]string) (bool, error) {
 	// Check Test Type
 	testType, exists := results["Test_Type"]
 	if !exists || testType != "RDMA_Write BW Test" {
-		return fmt.Errorf("Invalid Test Type: %s", testType)
+		return false, fmt.Errorf("Invalid Test Type: %s", testType)
 	}
 
 	// Check Link Type
 	linkType, exists := results["Link type"]
 	if !exists || !(linkType == "Ethernet" || linkType == "InfiniBand") {
-		return fmt.Errorf("Invalid Link Type: %s (Expected: Ethernet or InfiniBand)", linkType)
+		return false, fmt.Errorf("Invalid Link Type: %s (Expected: Ethernet or InfiniBand)", linkType)
 	}
 
 	// Check Bandwidth
 	bwAvg, err := strconv.ParseFloat(results["BW_Avg_Gbps"], 64)
 	if err != nil || bwAvg < MinBandwidth {
-		return fmt.Errorf("Bandwidth too low: %.2f Gbps (Min: %.2f Gbps)", bwAvg, MinBandwidth)
+		return false, fmt.Errorf("Bandwidth too low: %.2f Gbps (Min: %.2f Gbps)", bwAvg, MinBandwidth)
 	}
 
 	// Check Message Rate
 	msgRate, err := strconv.ParseFloat(results["MsgRate_Mpps"], 64)
 	if err != nil || msgRate < MinMsgRate {
-		return fmt.Errorf("MsgRate too low: %.3f Mpps (Min: %.1f Mpps)", msgRate, MinMsgRate)
+		return false, fmt.Errorf("MsgRate too low: %.3f Mpps (Min: %.1f Mpps)", msgRate, MinMsgRate)
 	}
 
 	// If everything is valid
-	return nil
+	return true, nil
 }
