@@ -1,13 +1,15 @@
 package nvidianetwork
 
 import (
+	"context"
 	"encoding/json"
-
+	"fmt"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidianetworkconfig"
+	rdmatest "github.com/rh-ecosystem-edge/nvidia-ci/internal/rdma"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfdcheck"
-
-	"os"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"time"
 
 	"github.com/golang/glog"
@@ -38,9 +40,6 @@ var (
 		nvidiaNetworkLabel:                  "true",
 	}
 
-	ofedDriverVersion = os.Getenv("OFED_DRIVER_VERSION")
-	ofedRepository    = os.Getenv("OFED_REPOSITORY")
-
 	// NvidiaNetworkConfig provides access to general configuration parameters.
 	nvidiaNetworkConfig *nvidianetworkconfig.NvidiaNetworkConfig
 	CatalogSource                         = UndefinedValue
@@ -58,25 +57,43 @@ var (
 
 	createNNOCustomCatalogsource  bool = false
 	CustomCatalogsourceIndexImage      = UndefinedValue
+
+	rdmaClientHostname = UndefinedValue
+	rdmaServerHostname = UndefinedValue
+	rdmaTestImage      = UndefinedValue
+
+	mellanoxEthernetInterfaceName   = UndefinedValue
+	mellanoxInfinibandInterfaceName = UndefinedValue
+
+	macvlanNetworkName        = UndefinedValue
+	macvlanNetworkIPAMRange   = UndefinedValue
+	macvlanNetworkIPAMGateway = UndefinedValue
+
+	ofedDriverVersion    = UndefinedValue
+	ofedDriverRepository = UndefinedValue
 )
 
 const (
 	nvidiaNetworkLabel                      = "feature.node.kubernetes.io/pci-15b3.present"
 	networkOperatorDefaultMasterBundleImage = "registry.gitlab.com/nvidia/kubernetes/network-operator/staging/network-operator-bundle:main-latest"
 
-	nnoNamespace              = "nvidia-network-operator"
-	nnoOperatorGroupName      = "nno-og"
-	nnoDeployment             = "nvidia-network-operator-controller-manager"
-	nnoSubscriptionName       = "nno-subscription"
-	nnoSubscriptionNamespace  = "nvidia-network-operator"
-	nnoCatalogSourceDefault   = "certified-operators"
-	nnoCatalogSourceNamespace = nfd.CatalogSourceNamespace
-	nnoPackage                = "nvidia-network-operator"
-	nnoNicClusterPolicyName   = "nic-cluster-policy"
-	nnoMacvlanNetworkName     = "example-macvlannetwork"
+	nnoNamespace                 = "nvidia-network-operator"
+	nnoOperatorGroupName         = "nno-og"
+	nnoDeployment                = "nvidia-network-operator-controller-manager"
+	nnoSubscriptionName          = "nno-subscription"
+	nnoSubscriptionNamespace     = "nvidia-network-operator"
+	nnoCatalogSourceDefault      = "certified-operators"
+	nnoCatalogSourceNamespace    = nfd.CatalogSourceNamespace
+	nnoPackage                   = "nvidia-network-operator"
+	nnoNicClusterPolicyName      = "nic-cluster-policy"
+	nnoMacvlanNetworkNameDefault = "rdmashared-net"
 
 	nnoCustomCatalogSourcePublisherName = "Red Hat"
 	nnoCustomCatalogSourceDisplayName   = "Certified Operators Custom"
+
+	rdmaTestImageDefault                   = "quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.1"
+	mellanoxEthernetInterfaceNameDefault   = "ens8f0np0"
+	mellanoxInfinibandInterfaceNameDefault = "ibs2f0"
 )
 
 var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
@@ -85,6 +102,14 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 		deployBundle       deploy.Deploy
 		deployBundleConfig deploy.BundleConfig
 	)
+
+	if mellanoxEthernetInterfaceName == "" {
+		mellanoxEthernetInterfaceName = mellanoxEthernetInterfaceNameDefault
+	}
+
+	if mellanoxInfinibandInterfaceName == "" {
+		mellanoxInfinibandInterfaceName = mellanoxEthernetInterfaceNameDefault
+	}
 
 	nvidiaNetworkConfig = nvidianetworkconfig.NewNvidiaNetworkConfig()
 
@@ -120,6 +145,114 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				cleanupAfterTest = nvidiaNetworkConfig.CleanupAfterTest
 				glog.V(networkparams.LogLevel).Infof("Flag to cleanup after test is set to env variable "+
 					"NVIDIANETWORK_CLEANUP value '%v'", cleanupAfterTest)
+			}
+
+			if nvidiaNetworkConfig.OfedDriverVersion == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_OFED_DRIVER_VERSION" +
+					" is not set, will use default ofed driver version from CSV alm-examples section")
+				ofedDriverVersion = UndefinedValue
+			} else {
+				ofedDriverVersion = nvidiaNetworkConfig.OfedDriverVersion
+				glog.V(networkparams.LogLevel).Infof("ofedDriverVersion is set to env variable "+
+					"NVIDIANETWORK_OFED_DRIVER_VERSION value '%s'", ofedDriverVersion)
+			}
+
+			if nvidiaNetworkConfig.OfedDriverRepository == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_OFED_REPOSITORY" +
+					" is not set, will use default ofed driver repository from CSV alm-examples section")
+				ofedDriverRepository = UndefinedValue
+			} else {
+				ofedDriverRepository = nvidiaNetworkConfig.OfedDriverRepository
+				glog.V(networkparams.LogLevel).Infof("ofedDriverRepository is set to env variable "+
+					"NVIDIANETWORK_OFED_REPOSITORY value '%s'", ofedDriverRepository)
+			}
+
+			if nvidiaNetworkConfig.MacvlanNetworkName == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_MACVLANNETWORK_NAME"+
+					" is not set, will use default name '%s'", nnoMacvlanNetworkNameDefault)
+				macvlanNetworkName = nnoMacvlanNetworkNameDefault
+			} else {
+				macvlanNetworkName = nvidiaNetworkConfig.MacvlanNetworkName
+				glog.V(networkparams.LogLevel).Infof("macvlanNetworkName is set to env variable "+
+					"NVIDIANETWORK_MACVLANNETWORK_NAME value '%s'", macvlanNetworkName)
+			}
+
+			if nvidiaNetworkConfig.MacvlanNetworkIPAMRange == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE" +
+					" is not set, skipping test case execution")
+				glog.V(networkparams.LogLevel).Infof("Skipping testcase:  env variable " +
+					"NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE is not set")
+				Skip("env variable NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE is not set")
+			} else {
+				macvlanNetworkIPAMRange = nvidiaNetworkConfig.MacvlanNetworkIPAMRange
+				glog.V(networkparams.LogLevel).Infof("macvlanNetworkIPAMRange is set to env variable "+
+					"NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE value '%s'", macvlanNetworkIPAMRange)
+			}
+
+			if nvidiaNetworkConfig.MacvlanNetworkIPAMGateway == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY" +
+					" is not set, skipping test case execution")
+				glog.V(networkparams.LogLevel).Infof("Skipping testcase:  env variable " +
+					"NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY is not set")
+				Skip("env variable NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY is not set")
+			} else {
+				macvlanNetworkIPAMGateway = nvidiaNetworkConfig.MacvlanNetworkIPAMGateway
+				glog.V(networkparams.LogLevel).Infof("macvlanNetworkIPAMGatway is set to env variable "+
+					"NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY value '%s'", macvlanNetworkIPAMGateway)
+			}
+
+			if nvidiaNetworkConfig.RdmaClientHostname == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_CLIENT_HOSTNAME" +
+					" is not set skipping test case execution")
+				glog.V(networkparams.LogLevel).Infof("Skipping testcase:  env variable " +
+					"NVIDIANETWORK_RDMA_CLIENT_HOSTNAME is not set")
+				Skip("env variable NVIDIANETWORK_RDMA_CLIENT_HOSTNAME is not set")
+			} else {
+				rdmaClientHostname = nvidiaNetworkConfig.RdmaClientHostname
+				glog.V(networkparams.LogLevel).Infof("rdmaClientHostname is set to env variable "+
+					"NVIDIANETWORK_RDMA_CLIENT_HOSTNAME value '%v'", rdmaClientHostname)
+			}
+
+			if nvidiaNetworkConfig.RdmaServerHostname == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_SERVER_HOSTNAME" +
+					" is not set skipping test case execution")
+				glog.V(networkparams.LogLevel).Infof("Skipping testcase:  env variable " +
+					"NVIDIANETWORK_RDMA_SERVER_HOSTNAME is not set")
+				Skip("env variable NVIDIANETWORK_RDMA_SERVER_HOSTNAME is not set")
+			} else {
+				rdmaServerHostname = nvidiaNetworkConfig.RdmaServerHostname
+				glog.V(networkparams.LogLevel).Infof("rdmaServerHostname is set to env variable "+
+					"NVIDIANETWORK_RDMA_SERVER_HOSTNAME value '%v'", rdmaServerHostname)
+			}
+
+			if nvidiaNetworkConfig.RdmaTestImage == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_TEST_IMAGE"+
+					" is not set, will use default container image '%s'", rdmaTestImageDefault)
+				rdmaTestImage = rdmaTestImageDefault
+			} else {
+				rdmaTestImage = nvidiaNetworkConfig.RdmaTestImage
+				glog.V(networkparams.LogLevel).Infof("rdmaTestImage is set to env variable "+
+					"NVIDIANETWORK_RDMA_TEST_IMAGE value '%v'", rdmaTestImage)
+			}
+
+			if nvidiaNetworkConfig.MellanoxEthernetInterfaceName == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME"+
+					" is not set, will use default ethernet interface name '%s'", mellanoxEthernetInterfaceNameDefault)
+				mellanoxEthernetInterfaceName = mellanoxEthernetInterfaceNameDefault
+			} else {
+				mellanoxEthernetInterfaceName = nvidiaNetworkConfig.MellanoxEthernetInterfaceName
+				glog.V(networkparams.LogLevel).Infof("mellanoxEthernetInterfaceName is set to env variable "+
+					"NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME value '%v'", mellanoxEthernetInterfaceName)
+			}
+
+			if nvidiaNetworkConfig.MellanoxInfinibandInterfaceName == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME"+
+					" is not set, will use default infiniband interface name '%s'", mellanoxInfinibandInterfaceNameDefault)
+				mellanoxInfinibandInterfaceName = mellanoxEthernetInterfaceNameDefault
+			} else {
+				mellanoxInfinibandInterfaceName = nvidiaNetworkConfig.MellanoxInfinibandInterfaceName
+				glog.V(networkparams.LogLevel).Infof("mellanoxInfinibandInterfaceName is set to env variable "+
+					"NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME value '%v'", mellanoxInfinibandInterfaceName)
 			}
 
 			if nvidiaNetworkConfig.DeployFromBundle {
@@ -568,11 +701,128 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			nicClusterPolicyBuilder := nvidianetwork.NewNicClusterPolicyBuilderFromObjectString(inittools.APIClient,
 				almExamples)
 
-			By("Updating NicClusterPolicyBuilder object driver version and driver repository from values in env vars")
-			glog.V(networkparams.LogLevel).Infof("Updating NicClusterPolicyBuilder object driver version and " +
-				"driver repository with values passed in env variables")
-			nicClusterPolicyBuilder.Definition.Spec.OFEDDriver.Repository = ofedRepository
-			nicClusterPolicyBuilder.Definition.Spec.OFEDDriver.Version = ofedDriverVersion
+			// 03-27-2025:  Need to only update if these values are provided to override versions from CSV alm-examples
+			By("Check if NicClusterPolicy ofed driver version and repository need to be updated from values in env vars")
+			glog.V(networkparams.LogLevel).Infof("Check if NicClusterPolicy ofed driver version and repository " +
+				"need to be updated from values in env vars")
+			if ofedDriverRepository != UndefinedValue {
+				glog.V(networkparams.LogLevel).Infof("Updating NicClusterPolicyBuilder object driver "+
+					"repository with value from env variables '%s'", ofedDriverRepository)
+				nicClusterPolicyBuilder.Definition.Spec.OFEDDriver.Repository = ofedDriverRepository
+			}
+			if ofedDriverVersion != UndefinedValue {
+				glog.V(networkparams.LogLevel).Infof("Updating NicClusterPolicyBuilder object driver "+
+					"version with value from env variables '%s'", ofedDriverVersion)
+				nicClusterPolicyBuilder.Definition.Spec.OFEDDriver.Version = ofedDriverVersion
+			}
+
+			By("Add extra env variables to the ofedDriver in NicClusterPolicy only for amd64 clusters")
+			glog.V(networkparams.LogLevel).Infof("Add extra env variables to the ofedDriver in " +
+				"NicClusterPolicy for amd64 clusters")
+
+			if clusterArchitecture == "amd64" {
+
+				glog.V(networkparams.LogLevel).Infof("Cluster architecture is 'amd64', adding 3 extra env " +
+					"variables to the ofedDriver env spec in NicClusterPolicy ")
+
+				var updatedOfedDriverEnvVars []corev1.EnvVar
+
+				newEnvVars := map[string]string{
+					"UNLOAD_STORAGE_MODULES":            "true",
+					"RESTORE_DRIVER_ON_POD_TERMINATION": "true",
+					"CREATE_IFNAMES_UDEV":               "true",
+				}
+
+				for key, value := range newEnvVars {
+					updatedOfedDriverEnvVars = append(updatedOfedDriverEnvVars, corev1.EnvVar{
+						Name: key, Value: value})
+				}
+
+				nicClusterPolicyBuilder.Definition.Spec.OFEDDriver.Env = updatedOfedDriverEnvVars
+
+			} else {
+				glog.V(networkparams.LogLevel).Infof("Cluster architecture is not 'amd64', skipping adding" +
+					"extra env variables to the ofedDriver env spec in NicClusterPolicy ")
+			}
+
+			By("Update NiClusterPolicy RDMA Shared Device Plugin config to use Eth and IB interface names")
+			glog.V(networkparams.LogLevel).Infof("Building the new config data structure for NicClusterPolicy " +
+				"rdmaSharedDevicePlugin to use Eth and IB interface names passed in env vars")
+
+			// Need to update the rdmaSharedDevicePlugin config element to look like this:
+			/*
+				rdmaSharedDevicePlugin:
+				      config: |
+				        {
+				          "configList": [
+				            {
+				              "resourceName": "rdma_shared_device_ib",
+				              "rdmaHcaMax": 63,
+				              "selectors": {
+				                "ifNames": ["ibs2f0"]
+				              }
+				            },
+				            {
+				              "resourceName": "rdma_shared_device_eth",
+				              "rdmaHcaMax": 63,
+				              "selectors": {
+				                "ifNames": ["ens8f0np0"]
+				              }
+				            }
+				          ]
+				        }
+
+
+			*/
+
+			// Define the JSON structure in Go structs
+			type Selector struct {
+				IfNames []string `json:"ifNames"`
+			}
+
+			type ConfigItem struct {
+				ResourceName string   `json:"resourceName"`
+				RdmaHcaMax   int      `json:"rdmaHcaMax"`
+				Selectors    Selector `json:"selectors"`
+			}
+
+			type Config struct {
+				ConfigList []ConfigItem `json:"configList"`
+			}
+
+			config := Config{
+				ConfigList: []ConfigItem{
+					{
+						ResourceName: "rdma_shared_device_ib",
+						RdmaHcaMax:   63,
+						Selectors:    Selector{IfNames: []string{mellanoxInfinibandInterfaceName}},
+						// Selectors:    Selector{IfNames: []string{"ibs2f0"}},
+					},
+					{
+						ResourceName: "rdma_shared_device_eth",
+						RdmaHcaMax:   63,
+						Selectors:    Selector{IfNames: []string{mellanoxEthernetInterfaceName}},
+						// Selectors:    Selector{IfNames: []string{"ens8f0np0"}},
+					},
+				},
+			}
+
+			// Convert to JSON
+			jsonData, err := json.MarshalIndent(config, "", "  ")
+			if err != nil {
+				fmt.Println("Error marshalling JSON:", err)
+				return
+			}
+
+			// Assign the generated JSON string
+			newRDMASharedDevicePluginConfig := string(jsonData)
+
+			glog.V(networkparams.LogLevel).Infof("New config data structure for NicClusterPolicy "+
+				"rdmaSharedDevicePlugin for Ethernet '%s' and IB '%s' interfaces from env vars:",
+				mellanoxEthernetInterfaceName, mellanoxInfinibandInterfaceName)
+			fmt.Println(newRDMASharedDevicePluginConfig)
+
+			nicClusterPolicyBuilder.Definition.Spec.RdmaSharedDevicePlugin.Config = newRDMASharedDevicePluginConfig
 
 			By("Deploy NicClusterPolicy")
 			createdNicClusterPolicyBuilder, err := nicClusterPolicyBuilder.Create()
@@ -633,18 +883,37 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 					"json:  %v", err)
 			}
 
-			// ===== 03-22-2025: MacvlanNetwork
 			By("Deploy MacvlanNetwork")
 			glog.V(networkparams.LogLevel).Infof("Creating MacvlanNetwork from CSV almExamples")
 			macvlanNetworkBuilder := nvidianetwork.NewMacvlanNetworkBuilderFromObjectString(inittools.APIClient,
 				almExamples)
 
-			By("Updating MacvlanNetworkBuilder object driver version and driver repository from values in env vars")
+			By("Updating MacvlanNetworkBuilder object name from value in env vars")
+			glog.V(networkparams.LogLevel).Infof("Updating MacvlanNetworkBuilder object value passed in "+
+				"env variable '%s'", macvlanNetworkName)
+			macvlanNetworkBuilder.Definition.Name = macvlanNetworkName
+
+			By("Updating MacvlanNetworkBuilder object ipam and master from values in env vars")
 			glog.V(networkparams.LogLevel).Infof("Updating MacvlanNetworkBuilder object ipam and " +
 				"master with values passed in env variables")
-			macvlanNetworkBuilder.Definition.Spec.IPAM =
-				"{\"type\": \"whereabouts\", \"range\": \"192.168.12.0/24\", \"gateway\": \"192.168.12.1\"}"
-			macvlanNetworkBuilder.Definition.Spec.Master = "enP12p1s0f0np0"
+
+			// 03-27-25.  Need to change later to pull it from env variables
+
+			ipamConfig := fmt.Sprintf(
+				`{"type": "whereabouts", "range": "%s", "gateway": "%s"}`,
+				macvlanNetworkIPAMRange, macvlanNetworkIPAMGateway,
+			)
+
+			fmt.Println(ipamConfig)
+			macvlanNetworkBuilder.Definition.Spec.IPAM = ipamConfig
+
+			// macvlanNetworkBuilder.Definition.Spec.IPAM =
+			// 	"{\"type\": \"whereabouts\", \"range\": \"192.168.12.0/24\", \"gateway\": \"192.168.12.1\"}"
+			//	"{\"type\": \"whereabouts\", \"range\": macvlanNetworkIPAMRange, \"gateway\": macvlanNetworkIPAMRange}"
+			// "{\"type\": \"whereabouts\", \"range\": \"192.168.12.0/24\", \"gateway\": \"192.168.12.1\"}"
+
+			macvlanNetworkBuilder.Definition.Spec.Master = mellanoxEthernetInterfaceName
+			// macvlanNetworkBuilder.Definition.Spec.Master = "enP12p1s0f0np0"
 
 			By("Deploy MacvlanNetwork")
 			createdMacvlanNetworkBuilder, err := macvlanNetworkBuilder.Create()
@@ -661,10 +930,9 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			}()
 
 			By("Pull the MacvlanNetwork just created from cluster, with updated fields")
-			pulledMacvlanNetwork, err := nvidianetwork.PullMacvlanNetwork(inittools.APIClient,
-				nnoMacvlanNetworkName)
+			pulledMacvlanNetwork, err := nvidianetwork.PullMacvlanNetwork(inittools.APIClient, macvlanNetworkName)
 			Expect(err).ToNot(HaveOccurred(), "error pulling MacvlanNetwork %s from cluster: "+
-				" %v ", nnoMacvlanNetworkName, err)
+				" %v ", macvlanNetworkName, err)
 
 			mvnJSON, err := json.MarshalIndent(pulledMacvlanNetwork, "", " ")
 
@@ -680,7 +948,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 
 			By("Wait up to 5 minutes for MacvlanNetwork to be ready")
 			glog.V(networkparams.LogLevel).Infof("Waiting for MacvlanNetwork to be ready")
-			err = wait.MacvlanNetworkReady(inittools.APIClient, nnoMacvlanNetworkName, 60*time.Second,
+			err = wait.MacvlanNetworkReady(inittools.APIClient, macvlanNetworkName, 60*time.Second,
 				5*time.Minute)
 
 			glog.V(networkparams.LogLevel).Infof("error waiting for MacvlanNetwork to be Ready:  %v ", err)
@@ -688,10 +956,9 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				" %v ", err)
 
 			By("Pull the ready MacvlanNetwork from cluster, with updated fields")
-			pulledReadyMacvlanNetwork, err := nvidianetwork.PullMacvlanNetwork(inittools.APIClient,
-				nnoMacvlanNetworkName)
+			pulledReadyMacvlanNetwork, err := nvidianetwork.PullMacvlanNetwork(inittools.APIClient, macvlanNetworkName)
 			Expect(err).ToNot(HaveOccurred(), "error pulling MacvlanNetwork %s from cluster: "+
-				" %v ", nnoMacvlanNetworkName, err)
+				" %v ", macvlanNetworkName, err)
 
 			cpReadyJSON, err := json.MarshalIndent(pulledReadyMacvlanNetwork, "", " ")
 
@@ -704,7 +971,114 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				glog.V(networkparams.LogLevel).Infof("Error Marshalling the ready MacvlanNetwork into "+
 					"json:  %v", err)
 			}
+
 		})
 
+		It("Run RDMA connectivity test with ib_write_bw", Label("rdma"), func() {
+
+			var (
+				rdmaNamespace     = "default"
+				rdmaServerPodName = "rdma-server-ci"
+				rdmaClientPodName = "rdma-client-ci"
+			)
+
+			By("Starting RDMA connectivity test with ib_write_bw testcase")
+			glog.V(networkparams.LogLevel).Infof("\nStarting RDMA connectivity test with ib_write_bw testcase")
+
+			By("Create ib_write_bw server workload pod")
+			glog.V(networkparams.LogLevel).Infof("Create ib_write_bw server workload pod '%s'", rdmaServerPodName)
+
+			rdmaServerPod := rdmatest.CreateRdmaWorkloadPod(rdmaServerPodName,
+				rdmaNamespace, "no", "server", rdmaServerHostname, "mlx5_1",
+				macvlanNetworkName, rdmaTestImage, "none")
+
+			createdRdmaServerPod, err := inittools.APIClient.Pods(rdmaServerPod.Namespace).Create(context.TODO(),
+				rdmaServerPod, metav1.CreateOptions{})
+
+			// DEBUG:
+			glog.V(networkparams.LogLevel).Infof("####### Server side - Debug:  err '%v'", err)
+
+			Expect(err).ToNot(HaveOccurred(), "error creating RDMA Server '%s' in cluster: %v",
+				rdmaServerPodName, err)
+
+			glog.V(networkparams.LogLevel).Infof("Successfully created RDMA ib_write_bw server workload pod '%s'",
+				createdRdmaServerPod.Name)
+
+			By("Wait 4 minutes for RDMA server pod to be running")
+			glog.V(networkparams.LogLevel).Infof("Waiting for 4 minutes for the RDMA server to be running")
+			time.Sleep(4 * time.Minute)
+
+			By("Get the interface net1 IP address in the ib_write_bw server workload pod")
+			glog.V(networkparams.LogLevel).Infof("Get the interface net1 interface Ip address in the "+
+				"ib_write_bw server workload pod '%s'", rdmaServerPodName)
+
+			net1IntIpAddrServer, err := rdmatest.GetMyServerIP(inittools.APIClient, rdmaServerPodName, rdmaNamespace,
+				"net1")
+
+			Expect(err).ToNot(HaveOccurred(), "error getting RDMA Server '%s' net1 interface ip "+
+				"address: %v", rdmaServerPodName, err)
+
+			glog.V(networkparams.LogLevel).Infof("RDMA Server interface net1 IP address captured: '%s'",
+				net1IntIpAddrServer)
+			Expect(net1IntIpAddrServer).ToNot(BeNil(), fmt.Sprintf("error RDMA Server '%s' net1 interface "+
+				"IP address: '%s' is null", rdmaServerPodName, net1IntIpAddrServer))
+
+			By("Create ib_write_bw client workload pod")
+			glog.V(networkparams.LogLevel).Infof("Create ib_write_bw Client workload pod '%s' and "+
+				"passing server ip address '%s'", rdmaClientPodName, net1IntIpAddrServer)
+
+			rdmaClientPod := rdmatest.CreateRdmaWorkloadPod(rdmaClientPodName,
+				rdmaNamespace, "no", "client", rdmaClientHostname, "mlx5_1",
+				macvlanNetworkName, rdmaTestImage, net1IntIpAddrServer)
+
+			createdRdmaClientPod, err := inittools.APIClient.Pods(rdmaClientPod.Namespace).Create(context.TODO(),
+				rdmaClientPod, metav1.CreateOptions{})
+
+			// DEBUG:
+			glog.V(networkparams.LogLevel).Infof("####### Client side - Debug:  err '%v'", err)
+
+			Expect(err).ToNot(HaveOccurred(), "error creating RDMA Client '%s' in cluster: %v",
+				rdmaClientPodName, err)
+
+			glog.V(networkparams.LogLevel).Infof("RDMA Client workload pod '%s' was successfully created in "+
+				"namespace '%s' and passed server IP Address '%s'", createdRdmaClientPod.Name,
+				createdRdmaClientPod.Namespace, net1IntIpAddrServer)
+
+			// Later remove sleep time and detect when RDMA test has completed
+			By("Wait 7 minutes for RDMA ib_write_bw tests to complete")
+			glog.V(networkparams.LogLevel).Infof("Waiting for 7 minutes for the RDMA ib_write_bw tests to " +
+				"complete")
+			time.Sleep(7 * time.Minute)
+
+			By("Collect logs from RDMA ib_write_bw tests from server workload pod")
+			glog.V(networkparams.LogLevel).Infof("Collect logs from RDMA ib_write_bw tests from server " +
+				"workload pod")
+
+			serverLogs, err := rdmatest.GetPodLogs(inittools.APIClient, rdmaNamespace, rdmaServerPodName)
+
+			Expect(err).ToNot(HaveOccurred(), "error collecting RDMA server '%s' pod logs: %v",
+				rdmaServerPodName, err)
+
+			glog.V(networkparams.LogLevel).Infof("RDMA server logs collected: \n'%s'", serverLogs)
+
+			By("Parse logs from RDMA ib_write_bw tests from server workload pod")
+			parseLogsMap, err := rdmatest.ParseRdmaOutput(serverLogs)
+			Expect(err).ToNot(HaveOccurred(), "error parsing RDMA server '%s' pod logs: %v",
+				rdmaServerPodName, err)
+
+			// Pretty print JSON output
+			jsonParseLogsMap, err := json.MarshalIndent(parseLogsMap, "", "  ")
+			Expect(err).ToNot(HaveOccurred(), "error formatting parsed RDMA server pod logs: %v", err)
+
+			glog.V(networkparams.LogLevel).Infof("Parsed and formatted RDMA server logs: \n'%s'",
+				string(jsonParseLogsMap))
+
+			By("Validate logs from RDMA ib_write_bw tests from server workload pod")
+			rdmaTestPassFail, err := rdmatest.ValidateRDMAResults(parseLogsMap)
+
+			Expect(rdmaTestPassFail).ToNot(BeFalse(), "RDMA test workload execution was FAILED, "+
+				"errors encountered: %v", err)
+			glog.V(networkparams.LogLevel).Infof("RDMA test validation has PASSED.  Successful test !")
+		})
 	})
 })
