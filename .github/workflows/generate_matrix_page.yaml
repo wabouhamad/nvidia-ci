@@ -16,12 +16,10 @@ on:
         description: 'PR number to process (must be specified as a number or "all")'
         required: true
         type: string
-
+permissions:
+  contents: write
 jobs:
   generate-matrix:
-    permissions:
-      contents: read
-      pages: write
     if: github.event_name != 'pull_request' || (github.repository == 'rh-ecosystem-edge/nvidia-ci' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     env:
@@ -84,7 +82,7 @@ jobs:
       - name: Deploy HTML to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          token: ${{ secrets.GH_PAGES_TOKEN }}
           branch: gh-pages
           folder: ${{ env.OUTPUT_DIR }}
           clean: false
+          force: false
