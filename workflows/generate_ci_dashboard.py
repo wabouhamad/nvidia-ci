@@ -27,45 +27,58 @@ def load_template(filename: str) -> str:
     with open(file_path, 'r', encoding='utf-8') as f:
         return f.read()
 
+
 def build_catalog_table_rows(regular_results: List[Dict[str, Any]]) -> str:
     """
     Build the <tr> rows for the table, grouped by the full OCP version.
     For each OCP version group, deduplicate by GPU version (keeping only the entry with the latest timestamp)
-    and create clickable GPU version links.
+    and create clickable GPU version links, sorting semantic versions correctly.
     """
-    grouped = {}
+    # Group results by full OCP version
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
     for result in regular_results:
-        # Group using the new field name.
         ocp_full = result["ocp_full_version"]
         grouped.setdefault(ocp_full, []).append(result)
 
     rows_html = ""
-    for ocp_full in sorted(grouped.keys(), reverse=True):
+    # Sort OCP versions semantically (so 4.9.10 > 4.9.9)
+    for ocp_full in sorted(
+        grouped.keys(),
+        key=lambda v: semver.VersionInfo.parse(v),
+        reverse=True
+    ):
         rows = grouped[ocp_full]
-        deduped = {}
+
+        # Deduplicate by GPU version, keeping latest timestamp
+        deduped: Dict[str, Dict[str, Any]] = {}
         for row in rows:
             gpu = row["gpu_operator_version"]
-            # Use the new key for the timestamp.
             if gpu not in deduped or row["job_timestamp"] > deduped[gpu]["job_timestamp"]:
                 deduped[gpu] = row
 
+        # Sort GPU Operator versions semantically
         deduped_rows = list(deduped.values())
         sorted_rows = sorted(
             deduped_rows,
             key=lambda r: semver.VersionInfo.parse(r["gpu_operator_version"].split("(")[0]),
             reverse=True
         )
+
+        # Build clickable links for GPU versions
         gpu_links = ", ".join(
             f'<a href="{r["prow_job_url"]}" target="_blank">{r["gpu_operator_version"]}</a>'
             for r in sorted_rows
         )
+
         rows_html += f"""
         <tr>
           <td style="min-width:150px; white-space:nowrap;">{ocp_full}</td>
           <td>{gpu_links}</td>
         </tr>
         """
+
     return rows_html
+
 
 def build_bundle_info(bundle_results: List[Dict[str, Any]]) -> str:
     """
