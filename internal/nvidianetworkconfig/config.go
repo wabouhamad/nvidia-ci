@@ -32,7 +32,6 @@ type NvidiaNetworkConfig struct {
 	IPoIBNetworkIPAMExcludeIP2         string `envconfig:"NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP2"`
 	OperatorUpgradeToChannel           string `envconfig:"NVIDIANETWORK_SUBSCRIPTION_UPGRADE_TO_CHANNEL"`
 	NNOFallbackCatalogsourceIndexImage string `envconfig:"NVIDIANETWORK_NNO_FALLBACK_CATALOGSOURCE_INDEX_IMAGE"`
-	NFDFallbackCatalogsourceIndexImage string `envconfig:"NVIDIANETWORK_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE"`
 }
 
 // NewNvidiaNetworkConfig returns instance of NvidiaNetworkConfig type.

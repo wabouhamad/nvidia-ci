@@ -172,7 +172,7 @@ $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-nno-ci-logs-dir
 $ export TEST_FEATURES="nvidianetwork"
-$ export TEST_LABELS='nno,rdma-shared-dev'
+$ export TEST_LABELS='nno,rdma'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIANETWORK_CATALOGSOURCE="certified-operators"
@@ -189,23 +189,14 @@ $ export NVIDIANETWORK_DEPLOY_FROM_BUNDLE=true
 $ export NVIDIANETWORK_BUNDLE_IMAGE="nvcr.io/.../network-operator-bundle:v25.1.0-rc.2"
 $ export NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME="ens8f0np0"
 $ export NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME="ibs2f0"
-$ export NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE="default"
-# RDMA Shared Device Test Link Type: Infiniband or Ethernet
-$ export NVIDIANETWORK_RDMA_LINK_TYPE="infiniband"
-# For RDMA Shared Device Ethernet:
 $ export NVIDIANETWORK_MACVLANNETWORK_NAME="rdmashared-net"
+$ export NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE="default"
 $ export NVIDIANETWORK_RDMA_LINK_TYPE="ethernet"
 $ export NVIDIANETWORK_RDMA_MLX_DEVICE="mlx5_2"
-# For RDMA Shared Device Infiniband:
-$ export NVIDIANETWORK_RDMA_MLX_DEVICE="mlx5_3"
-$ export NVIDIANETWORK_IPOIBNETWORK_NAME="example-ipoibnetwork"
-$ export NVIDIANETWORK_IPOIBNETWORK_IPAM_RANGE=192.168.6.225/24
-$ export NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP1=192.168.6.229/30
-$ export NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP2=192.168.6.236/32
 
 
 $ make run-tests
 Executing nvidiagpu test-runner script
 scripts/test-runner.sh
-ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nno,rdma-shared-dev" ./tests/nvidianetwork
+ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nno,rdma" ./tests/nvidianetwork
 ```
