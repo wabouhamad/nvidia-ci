@@ -15,9 +15,12 @@ type NvidiaNetworkConfig struct {
 	BundleImage                        string `envconfig:"NVIDIANETWORK_BUNDLE_IMAGE"`
 	OfedDriverVersion                  string `envconfig:"NVIDIANETWORK_OFED_DRIVER_VERSION"`
 	OfedDriverRepository               string `envconfig:"NVIDIANETWORK_OFED_REPOSITORY"`
+	RdmaWorkloadNamespace              string `envconfig:"NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE"`
+	RdmaLinkType                       string `envconfig:"NVIDIANETWORK_RDMA_LINK_TYPE"`
 	RdmaClientHostname                 string `envconfig:"NVIDIANETWORK_RDMA_CLIENT_HOSTNAME"`
 	RdmaServerHostname                 string `envconfig:"NVIDIANETWORK_RDMA_SERVER_HOSTNAME"`
 	RdmaTestImage                      string `envconfig:"NVIDIANETWORK_RDMA_TEST_IMAGE"`
+	RdmaMlxDevice                      string `envconfig:"NVIDIANETWORK_RDMA_MLX_DEVICE"`
 	MellanoxEthernetInterfaceName      string `envconfig:"NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME"`
 	MellanoxInfinibandInterfaceName    string `envconfig:"NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME"`
 	MacvlanNetworkName                 string `envconfig:"NVIDIANETWORK_MACVLANNETWORK_NAME"`
