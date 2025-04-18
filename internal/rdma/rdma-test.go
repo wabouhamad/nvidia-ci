@@ -19,15 +19,22 @@ import (
 var (
 	MinBandwidth       = 10.0 // Minimum BW in Gbps
 	MinMsgRate         = 0.1  // Minimum MsgRate in Mpps
-	ValidLinkTypes     = "Ethernet,InfiniBand"
+	ValidLinkTypes     = "Ethernet,IB"
 	MacVlanNetworkName = "rdmashared-net"
+
+	RdmaSharedDeviceResourceName = map[string]corev1.ResourceName{
+		"ethernet":   "rdma/rdma_shared_device_eth",
+		"infiniband": "rdma/rdma_shared_device_ib",
+	}
 )
 
 // CreateRdmaWorkloadPod create RDMA worker pod.
 func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, crName,
-	image, serverIP string) *corev1.Pod {
+	image, linkType, serverIP string) *corev1.Pod {
 
-	var args []string
+	var (
+		args []string
+	)
 
 	if mode == "server" {
 		args = []string{"-c", withCuda, "-m", mode, "-n", "net1", "-d", device}
@@ -63,10 +70,10 @@ func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, cr
 					},
 					Resources: corev1.ResourceRequirements{
 						Limits: corev1.ResourceList{
-							"rdma/rdma_shared_device_eth": resource.MustParse("1"),
+							RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
 						},
 						Requests: corev1.ResourceList{
-							"rdma/rdma_shared_device_eth": resource.MustParse("1"),
+							RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
 						},
 					},
 				},
@@ -205,8 +212,8 @@ func ValidateRDMAResults(results map[string]string) (bool, error) {
 
 	// Check Link Type
 	linkType, exists := results["Link type"]
-	if !exists || !(linkType == "Ethernet" || linkType == "InfiniBand") {
-		return false, fmt.Errorf("Invalid Link Type: %s (Expected: Ethernet or InfiniBand)", linkType)
+	if !exists || !(linkType == "Ethernet" || linkType == "IB") {
+		return false, fmt.Errorf("Invalid Link Type: %s (Expected: Ethernet or IB)", linkType)
 	}
 
 	// Check Bandwidth

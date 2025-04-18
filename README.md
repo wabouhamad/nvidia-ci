@@ -91,6 +91,9 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
 - `NVIDIANETWORK_OFED_DRIVER_VERSION`: OFED Driver Version.  If not specified, the default driver version is used - _optional_    
 - `NVIDIANETWORK_OFED_REPOSITORY`:  OFED Driver Repository.   If not specified, the default repository is used - _optional_            
+- `NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE`:  RDMA workload pod namespace - _required_
+- `NVIDIANETWORK_RDMA_LINK_TYPE` Layer 2 link type, Infinband or Ethernet - _required_
+- `NVIDIANETWORK_RDMA_MLX_DEVICE:` mlx5 device ID corresponding to the interface port connected to Spectrum or Infiniband switch - _required_
 - `NVIDIANETWORK_RDMA_CLIENT_HOSTNAME:` RDMA Client hostname of first worker node for ib_write_bw test - _required when running the RDMA testcase_ 
 - `NVIDIANETWORK_RDMA_SERVER_HOSTNAME:` RDMA Server hostname of second worker node for ib_write_bw test - _required when running the RDMA testcase_   
 - `NVIDIANETWORK_RDMA_TEST_IMAGE:` RDMA Test Container Image that runs the entrypoint.sh script with optional arguments specified in the pod spec.  This container will clone the "https://github.com/linux-rdma/perftest" repo and builds the ib_write_bw binaries with or without cuda headers.  It will also run the ib_write_bw command with arguments either in CLient or Server mode.  Defaults to "quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.1" - _optional_
@@ -184,6 +187,9 @@ $ export NVIDIANETWORK_BUNDLE_IMAGE="nvcr.io/.../network-operator-bundle:v25.1.0
 $ export NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME="ens8f0np0"
 $ export NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME="ibs2f0"
 $ export NVIDIANETWORK_MACVLANNETWORK_NAME="rdmashared-net"
+$ export NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE="default"
+$ export NVIDIANETWORK_RDMA_LINK_TYPE="ethernet"
+$ export NVIDIANETWORK_RDMA_MLX_DEVICE="mlx5_2"
 
 
 $ make run-tests

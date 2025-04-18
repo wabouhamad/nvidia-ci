@@ -58,9 +58,12 @@ var (
 	createNNOCustomCatalogsource  bool = false
 	CustomCatalogsourceIndexImage      = UndefinedValue
 
-	rdmaClientHostname = UndefinedValue
-	rdmaServerHostname = UndefinedValue
-	rdmaTestImage      = UndefinedValue
+	rdmaWorkloadNamespace = UndefinedValue
+	rdmaLinkType          = UndefinedValue
+	rdmaMlxDevice         = UndefinedValue
+	rdmaClientHostname    = UndefinedValue
+	rdmaServerHostname    = UndefinedValue
+	rdmaTestImage         = UndefinedValue
 
 	mellanoxEthernetInterfaceName   = UndefinedValue
 	mellanoxInfinibandInterfaceName = UndefinedValue
@@ -233,6 +236,44 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				rdmaTestImage = nvidiaNetworkConfig.RdmaTestImage
 				glog.V(networkparams.LogLevel).Infof("rdmaTestImage is set to env variable "+
 					"NVIDIANETWORK_RDMA_TEST_IMAGE value '%v'", rdmaTestImage)
+			}
+
+			// === 04-09-2025
+			// RdmaWorkloadNamespace                       string `envconfig:"NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE"`
+			if nvidiaNetworkConfig.RdmaWorkloadNamespace == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE" +
+					" is not set skipping test case execution")
+				glog.V(networkparams.LogLevel).Infof("Skipping testcase:  env variable " +
+					"NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE is not set")
+				Skip("env variable NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE is not set")
+			} else {
+				rdmaWorkloadNamespace = nvidiaNetworkConfig.RdmaWorkloadNamespace
+				glog.V(networkparams.LogLevel).Infof("rdmaLinkType is set to env variable "+
+					"NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE value '%v'", rdmaWorkloadNamespace)
+			}
+
+			if nvidiaNetworkConfig.RdmaLinkType == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_LINK_TYPE" +
+					" is not set skipping test case execution")
+				glog.V(networkparams.LogLevel).Infof("Skipping testcase:  env variable " +
+					"NVIDIANETWORK_RDMA_LINK_TYPE is not set")
+				Skip("env variable NVIDIANETWORK_RDMA_LINK_TYPE is not set")
+			} else {
+				rdmaLinkType = nvidiaNetworkConfig.RdmaLinkType
+				glog.V(networkparams.LogLevel).Infof("rdmaLinkType is set to env variable "+
+					"NVIDIANETWORK_RDMA_LINK_TYPE value '%v'", rdmaLinkType)
+			}
+
+			if nvidiaNetworkConfig.RdmaMlxDevice == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_MLX_DEVICE" +
+					" is not set skipping test case execution")
+				glog.V(networkparams.LogLevel).Infof("Skipping testcase:  env variable " +
+					"NVIDIANETWORK_RDMA_MLX_DEVICE is not set")
+				Skip("env variable NVIDIANETWORK_RDMA_MLX_DEVICE is not set")
+			} else {
+				rdmaMlxDevice = nvidiaNetworkConfig.RdmaMlxDevice
+				glog.V(networkparams.LogLevel).Infof("rdmaMlxDevice is set to env variable "+
+					"NVIDIANETWORK_RDMA_MLX_DEVICE value '%v'", rdmaMlxDevice)
 			}
 
 			if nvidiaNetworkConfig.MellanoxEthernetInterfaceName == "" {
@@ -731,6 +772,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 					"UNLOAD_STORAGE_MODULES":            "true",
 					"RESTORE_DRIVER_ON_POD_TERMINATION": "true",
 					"CREATE_IFNAMES_UDEV":               "true",
+					"ENTRYPOINT_DEBUG":                  "true",
 				}
 
 				for key, value := range newEnvVars {
@@ -897,8 +939,6 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(networkparams.LogLevel).Infof("Updating MacvlanNetworkBuilder object ipam and " +
 				"master with values passed in env variables")
 
-			// 03-27-25.  Need to change later to pull it from env variables
-
 			ipamConfig := fmt.Sprintf(
 				`{"type": "whereabouts", "range": "%s", "gateway": "%s"}`,
 				macvlanNetworkIPAMRange, macvlanNetworkIPAMGateway,
@@ -907,13 +947,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			fmt.Println(ipamConfig)
 			macvlanNetworkBuilder.Definition.Spec.IPAM = ipamConfig
 
-			// macvlanNetworkBuilder.Definition.Spec.IPAM =
-			// 	"{\"type\": \"whereabouts\", \"range\": \"192.168.12.0/24\", \"gateway\": \"192.168.12.1\"}"
-			//	"{\"type\": \"whereabouts\", \"range\": macvlanNetworkIPAMRange, \"gateway\": macvlanNetworkIPAMRange}"
-			// "{\"type\": \"whereabouts\", \"range\": \"192.168.12.0/24\", \"gateway\": \"192.168.12.1\"}"
-
 			macvlanNetworkBuilder.Definition.Spec.Master = mellanoxEthernetInterfaceName
-			// macvlanNetworkBuilder.Definition.Spec.Master = "enP12p1s0f0np0"
 
 			By("Deploy MacvlanNetwork")
 			createdMacvlanNetworkBuilder, err := macvlanNetworkBuilder.Create()
@@ -977,10 +1011,12 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 		It("Run RDMA connectivity test with ib_write_bw", Label("rdma"), func() {
 
 			var (
-				rdmaNamespace     = "default"
-				rdmaServerPodName = "rdma-server-ci"
-				rdmaClientPodName = "rdma-client-ci"
+				rdmaServerPodNamePrefix = "rdma-server-ci"
+				rdmaClientPodNamePrefix = "rdma-client-ci"
 			)
+
+			rdmaServerPodName := rdmaServerPodNamePrefix + "-" + rdmaLinkType
+			rdmaClientPodName := rdmaClientPodNamePrefix + "-" + rdmaLinkType
 
 			By("Starting RDMA connectivity test with ib_write_bw testcase")
 			glog.V(networkparams.LogLevel).Infof("\nStarting RDMA connectivity test with ib_write_bw testcase")
@@ -989,8 +1025,8 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(networkparams.LogLevel).Infof("Create ib_write_bw server workload pod '%s'", rdmaServerPodName)
 
 			rdmaServerPod := rdmatest.CreateRdmaWorkloadPod(rdmaServerPodName,
-				rdmaNamespace, "no", "server", rdmaServerHostname, "mlx5_1",
-				macvlanNetworkName, rdmaTestImage, "none")
+				rdmaWorkloadNamespace, "no", "server", rdmaServerHostname, rdmaMlxDevice,
+				macvlanNetworkName, rdmaTestImage, rdmaLinkType, "none")
 
 			createdRdmaServerPod, err := inittools.APIClient.Pods(rdmaServerPod.Namespace).Create(context.TODO(),
 				rdmaServerPod, metav1.CreateOptions{})
@@ -1012,8 +1048,8 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(networkparams.LogLevel).Infof("Get the interface net1 interface Ip address in the "+
 				"ib_write_bw server workload pod '%s'", rdmaServerPodName)
 
-			net1IntIpAddrServer, err := rdmatest.GetMyServerIP(inittools.APIClient, rdmaServerPodName, rdmaNamespace,
-				"net1")
+			net1IntIpAddrServer, err := rdmatest.GetMyServerIP(inittools.APIClient, rdmaServerPodName,
+				rdmaWorkloadNamespace, "net1")
 
 			Expect(err).ToNot(HaveOccurred(), "error getting RDMA Server '%s' net1 interface ip "+
 				"address: %v", rdmaServerPodName, err)
@@ -1027,9 +1063,9 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(networkparams.LogLevel).Infof("Create ib_write_bw Client workload pod '%s' and "+
 				"passing server ip address '%s'", rdmaClientPodName, net1IntIpAddrServer)
 
-			rdmaClientPod := rdmatest.CreateRdmaWorkloadPod(rdmaClientPodName,
-				rdmaNamespace, "no", "client", rdmaClientHostname, "mlx5_1",
-				macvlanNetworkName, rdmaTestImage, net1IntIpAddrServer)
+			rdmaClientPod := rdmatest.CreateRdmaWorkloadPod(rdmaClientPodName, rdmaWorkloadNamespace, "no",
+				"client", rdmaClientHostname, rdmaMlxDevice, macvlanNetworkName, rdmaTestImage,
+				rdmaLinkType, net1IntIpAddrServer)
 
 			createdRdmaClientPod, err := inittools.APIClient.Pods(rdmaClientPod.Namespace).Create(context.TODO(),
 				rdmaClientPod, metav1.CreateOptions{})
@@ -1054,7 +1090,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(networkparams.LogLevel).Infof("Collect logs from RDMA ib_write_bw tests from server " +
 				"workload pod")
 
-			serverLogs, err := rdmatest.GetPodLogs(inittools.APIClient, rdmaNamespace, rdmaServerPodName)
+			serverLogs, err := rdmatest.GetPodLogs(inittools.APIClient, rdmaWorkloadNamespace, rdmaServerPodName)
 
 			Expect(err).ToNot(HaveOccurred(), "error collecting RDMA server '%s' pod logs: %v",
 				rdmaServerPodName, err)
