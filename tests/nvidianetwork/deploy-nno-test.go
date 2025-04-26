@@ -7,6 +7,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/nvidianetworkconfig"
 	rdmatest "github.com/rh-ecosystem-edge/nvidia-ci/internal/rdma"
+	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfdcheck"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,7 +16,6 @@ import (
 	"github.com/golang/glog"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/deployment"
 	. "github.com/rh-ecosystem-edge/nvidia-ci/pkg/global"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/namespace"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/nfd"
@@ -72,6 +72,11 @@ var (
 	macvlanNetworkIPAMRange   = UndefinedValue
 	macvlanNetworkIPAMGateway = UndefinedValue
 
+	ipoibNetworkName           = UndefinedValue
+	ipoibNetworkIPAMRange      = UndefinedValue
+	ipoibNetworkIPAMExcludeIP1 = UndefinedValue
+	ipoibNetworkIPAMExcludeIP2 = UndefinedValue
+
 	ofedDriverVersion    = UndefinedValue
 	ofedDriverRepository = UndefinedValue
 )
@@ -80,23 +85,23 @@ const (
 	nvidiaNetworkLabel                      = "feature.node.kubernetes.io/pci-15b3.present"
 	networkOperatorDefaultMasterBundleImage = "registry.gitlab.com/nvidia/kubernetes/network-operator/staging/network-operator-bundle:main-latest"
 
-	nnoNamespace                 = "nvidia-network-operator"
-	nnoOperatorGroupName         = "nno-og"
-	nnoDeployment                = "nvidia-network-operator-controller-manager"
-	nnoSubscriptionName          = "nno-subscription"
-	nnoSubscriptionNamespace     = "nvidia-network-operator"
-	nnoCatalogSourceDefault      = "certified-operators"
-	nnoCatalogSourceNamespace    = nfd.CatalogSourceNamespace
-	nnoPackage                   = "nvidia-network-operator"
-	nnoNicClusterPolicyName      = "nic-cluster-policy"
-	nnoMacvlanNetworkNameDefault = "rdmashared-net"
-
+	nnoNamespace                        = "nvidia-network-operator"
+	nnoOperatorGroupName                = "nno-og"
+	nnoDeployment                       = "nvidia-network-operator-controller-manager"
+	nnoSubscriptionName                 = "nno-subscription"
+	nnoSubscriptionNamespace            = "nvidia-network-operator"
+	nnoCatalogSourceDefault             = "certified-operators"
+	nnoCatalogSourceNamespace           = nfd.CatalogSourceNamespace
+	nnoPackage                          = "nvidia-network-operator"
+	nnoNicClusterPolicyName             = "nic-cluster-policy"
+	nnoMacvlanNetworkNameDefault        = "rdmashared-net"
+	nnoIPoIBNetworkNameDefault          = "example-ipoibnetwork"
 	nnoCustomCatalogSourcePublisherName = "Red Hat"
 	nnoCustomCatalogSourceDisplayName   = "Certified Operators Custom"
 
-	rdmaTestImageDefault                   = "quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.1"
-	mellanoxEthernetInterfaceNameDefault   = "ens8f0np0"
-	mellanoxInfinibandInterfaceNameDefault = "ibs2f0"
+	rdmaTestImageDefault                   = "quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.2"
+	mellanoxEthernetInterfaceNameDefault   = "ens1f0np0"
+	mellanoxInfinibandInterfaceNameDefault = "ibs1f1"
 )
 
 var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
@@ -204,6 +209,52 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 					"NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY value '%s'", macvlanNetworkIPAMGateway)
 			}
 
+			if nvidiaNetworkConfig.IPoIBNetworkName == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_IPOIBNETWORK_NAME"+
+					" is not set, will use default name '%s'", nnoIPoIBNetworkNameDefault)
+				ipoibNetworkName = nnoIPoIBNetworkNameDefault
+			} else {
+				ipoibNetworkName = nvidiaNetworkConfig.IPoIBNetworkName
+				glog.V(networkparams.LogLevel).Infof("ipoibNetworkName is set to env variable "+
+					"NVIDIANETWORK_IPOIBNETWORK_NAME value '%s'", ipoibNetworkName)
+			}
+
+			if nvidiaNetworkConfig.IPoIBNetworkIPAMRange == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_IPOIBNETWORK_IPAM_RANGE" +
+					" is not set, skipping test case execution")
+				glog.V(networkparams.LogLevel).Infof("Skipping testcase:  env variable " +
+					"NVIDIANETWORK_IPOIBNETWORK_IPAM_RANGE is not set")
+				Skip("env variable NVIDIANETWORK_IPOIBNETWORK_IPAM_RANGE is not set")
+			} else {
+				ipoibNetworkIPAMRange = nvidiaNetworkConfig.IPoIBNetworkIPAMRange
+				glog.V(networkparams.LogLevel).Infof("ipoibNetworkIPAMRange is set to env variable "+
+					"NVIDIANETWORK_IPOIBNETWORK_IPAM_RANGE value '%s'", ipoibNetworkIPAMRange)
+			}
+
+			if nvidiaNetworkConfig.IPoIBNetworkIPAMExcludeIP1 == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP1" +
+					" is not set, skipping test case execution")
+				glog.V(networkparams.LogLevel).Infof("Skipping testcase:  env variable " +
+					"NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP1 is not set")
+				Skip("env variable NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP1 is not set")
+			} else {
+				ipoibNetworkIPAMExcludeIP1 = nvidiaNetworkConfig.IPoIBNetworkIPAMExcludeIP1
+				glog.V(networkparams.LogLevel).Infof("ipoibNetworkIPAMExcludeIP1 is set to env variable "+
+					"NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP1 value '%s'", ipoibNetworkIPAMExcludeIP1)
+			}
+
+			if nvidiaNetworkConfig.IPoIBNetworkIPAMExcludeIP2 == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP2" +
+					" is not set, skipping test case execution")
+				glog.V(networkparams.LogLevel).Infof("Skipping testcase:  env variable " +
+					"NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP2 is not set")
+				Skip("env variable NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP2 is not set")
+			} else {
+				ipoibNetworkIPAMExcludeIP2 = nvidiaNetworkConfig.IPoIBNetworkIPAMExcludeIP2
+				glog.V(networkparams.LogLevel).Infof("ipoibNetworkIPAMExcludeIP2 is set to env variable "+
+					"NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP2 value '%s'", ipoibNetworkIPAMExcludeIP2)
+			}
+
 			if nvidiaNetworkConfig.RdmaClientHostname == "" {
 				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_CLIENT_HOSTNAME" +
 					" is not set skipping test case execution")
@@ -238,8 +289,6 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 					"NVIDIANETWORK_RDMA_TEST_IMAGE value '%v'", rdmaTestImage)
 			}
 
-			// === 04-09-2025
-			// RdmaWorkloadNamespace                       string `envconfig:"NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE"`
 			if nvidiaNetworkConfig.RdmaWorkloadNamespace == "" {
 				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE" +
 					" is not set skipping test case execution")
@@ -815,6 +864,7 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				        }
 
 
+
 			*/
 
 			// Define the JSON structure in Go structs
@@ -838,13 +888,11 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 						ResourceName: "rdma_shared_device_ib",
 						RdmaHcaMax:   63,
 						Selectors:    Selector{IfNames: []string{mellanoxInfinibandInterfaceName}},
-						// Selectors:    Selector{IfNames: []string{"ibs2f0"}},
 					},
 					{
 						ResourceName: "rdma_shared_device_eth",
 						RdmaHcaMax:   63,
 						Selectors:    Selector{IfNames: []string{mellanoxEthernetInterfaceName}},
-						// Selectors:    Selector{IfNames: []string{"ens8f0np0"}},
 					},
 				},
 			}
@@ -994,25 +1042,118 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			Expect(err).ToNot(HaveOccurred(), "error pulling MacvlanNetwork %s from cluster: "+
 				" %v ", macvlanNetworkName, err)
 
-			cpReadyJSON, err := json.MarshalIndent(pulledReadyMacvlanNetwork, "", " ")
+			mvnReadyJSON, err := json.MarshalIndent(pulledReadyMacvlanNetwork, "", " ")
 
 			if err == nil {
 				glog.V(networkparams.LogLevel).Infof("The ready MacvlanNetwork just has name:  %v",
 					pulledReadyMacvlanNetwork.Definition.Name)
 				glog.V(networkparams.LogLevel).Infof("The ready MacvlanNetwork just marshalled "+
-					"in json: %v", string(cpReadyJSON))
+					"in json: %v", string(mvnReadyJSON))
 			} else {
 				glog.V(networkparams.LogLevel).Infof("Error Marshalling the ready MacvlanNetwork into "+
 					"json:  %v", err)
 			}
 
+			By("Deploy IPoIBNetwork")
+			glog.V(networkparams.LogLevel).Infof("Creating IPoIBNetwork from CSV almExamples")
+			ipoibNetworkBuilder := nvidianetwork.NewIPoIBNetworkBuilderFromObjectString(inittools.APIClient,
+				almExamples)
+
+			By("Updating IPoIBNetworkBuilder object name from value in env vars")
+			glog.V(networkparams.LogLevel).Infof("Updating IPoIBNetworkBuilder object value passed in "+
+				"env variable '%s'", ipoibNetworkName)
+			ipoibNetworkBuilder.Definition.Name = ipoibNetworkName
+
+			By("Updating IPoIBNetworkBuilder object ipam and master from values in env vars")
+			glog.V(networkparams.LogLevel).Infof("Updating IPoIBNetworkBuilder object ipam and " +
+				"master with values passed in env variables")
+			/*
+			   ipam: |
+			     {
+			       "type": "whereabouts",
+			       "range": "192.168.6.225/28",
+			       "exclude": [
+			        "192.168.6.229/30",
+			        "192.168.6.236/32"
+			       ]
+			     }
+			   master: ibs1f1
+			*/
+
+			ipoibIpamConfig := fmt.Sprintf(
+				`{"type": "whereabouts", "range": "%s", "exclude": ["%s", "%s"]}`,
+				ipoibNetworkIPAMRange, ipoibNetworkIPAMExcludeIP1, ipoibNetworkIPAMExcludeIP2,
+			)
+
+			fmt.Println(ipoibIpamConfig)
+			ipoibNetworkBuilder.Definition.Spec.IPAM = ipoibIpamConfig
+
+			ipoibNetworkBuilder.Definition.Spec.Master = mellanoxInfinibandInterfaceName
+
+			By("Deploy IPoIBNetwork")
+			createdIPoIBNetworkBuilder, err := ipoibNetworkBuilder.Create()
+			Expect(err).ToNot(HaveOccurred(), "Error Creating IPoIBNetwork from csv "+
+				"almExamples  %v ", err)
+			glog.V(networkparams.LogLevel).Infof("IPoIBNetwork '%s' is successfully created",
+				createdIPoIBNetworkBuilder.Definition.Name)
+
+			defer func() {
+				if cleanupAfterTest {
+					_, err := createdIPoIBNetworkBuilder.Delete()
+					Expect(err).ToNot(HaveOccurred())
+				}
+			}()
+
+			By("Pull the IPoIBNetwork just created from cluster, with updated fields")
+			pulledIPoIBNetwork, err := nvidianetwork.PullIPoIBNetwork(inittools.APIClient, ipoibNetworkName)
+			Expect(err).ToNot(HaveOccurred(), "error pulling IPoIBNetwork %s from cluster: "+
+				" %v ", ipoibNetworkName, err)
+
+			ipoibJSON, err := json.MarshalIndent(pulledIPoIBNetwork, "", " ")
+
+			if err == nil {
+				glog.V(networkparams.LogLevel).Infof("The IPoIBNetwork just created has name:  %v",
+					pulledIPoIBNetwork.Definition.Name)
+				glog.V(networkparams.LogLevel).Infof("The IPoIBNetwork just created marshalled "+
+					"in json: %v", string(ipoibJSON))
+			} else {
+				glog.V(networkparams.LogLevel).Infof("Error Marshalling IPoIBNetwork into json:  %v",
+					err)
+			}
+
+			By("Wait up to 5 minutes for IPoIBNetwork to be ready")
+			glog.V(networkparams.LogLevel).Infof("Waiting for IPoIBNetwork to be ready")
+			err = wait.IPoIBNetworkReady(inittools.APIClient, ipoibNetworkName, 60*time.Second,
+				5*time.Minute)
+
+			glog.V(networkparams.LogLevel).Infof("error waiting for IPoIBNetwork to be Ready:  %v ", err)
+			Expect(err).ToNot(HaveOccurred(), "error waiting for IPoIBNetwork to be Ready: "+
+				" %v ", err)
+
+			By("Pull the ready IPoIBNetwork from cluster, with updated fields")
+			pulledReadyIPoIBNetwork, err := nvidianetwork.PullIPoIBNetwork(inittools.APIClient, ipoibNetworkName)
+			Expect(err).ToNot(HaveOccurred(), "error pulling IPoIBNetwork %s from cluster: "+
+				" %v ", ipoibNetworkName, err)
+
+			ipoibReadyJSON, err := json.MarshalIndent(pulledReadyIPoIBNetwork, "", " ")
+
+			if err == nil {
+				glog.V(networkparams.LogLevel).Infof("The ready IPoIBNetwork just has name:  %v",
+					pulledReadyIPoIBNetwork.Definition.Name)
+				glog.V(networkparams.LogLevel).Infof("The ready IPoIBNetwork just marshalled "+
+					"in json: %v", string(ipoibReadyJSON))
+			} else {
+				glog.V(networkparams.LogLevel).Infof("Error Marshalling the ready IPoIBNetwork into "+
+					"json:  %v", err)
+			}
+
 		})
 
-		It("Run RDMA connectivity test with ib_write_bw", Label("rdma"), func() {
+		It("Run RDMA connectivity test with ib_write_bw", Label("rdma-shared-dev"), func() {
 
 			var (
-				rdmaServerPodNamePrefix = "rdma-server-ci"
-				rdmaClientPodNamePrefix = "rdma-client-ci"
+				rdmaServerPodNamePrefix = "rdma-shared-dev-server-ci"
+				rdmaClientPodNamePrefix = "rdma-shared-dev-client-ci"
 			)
 
 			rdmaServerPodName := rdmaServerPodNamePrefix + "-" + rdmaLinkType
