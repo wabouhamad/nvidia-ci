@@ -55,3 +55,24 @@ func MacvlanNetworkReady(apiClient *clients.Settings, macvlanNetworkName string,
 			return macVlanNetwork.Object.Status.State == networkoperator.StateReady, nil
 		})
 }
+
+// IPoIBNetworkReady Waits until ipoibNetwork is Ready.
+func IPoIBNetworkReady(apiClient *clients.Settings, ipoibNetworkName string, pollInterval,
+	timeout time.Duration) error {
+	return wait.PollUntilContextTimeout(
+		context.Background(), pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+			ipoIBNetwork, err := nvidianetwork.PullIPoIBNetwork(apiClient, ipoibNetworkName)
+
+			if err != nil {
+				glog.V(networkparams.LogLevel).Infof("IPoIBNetwork pull from cluster error: %s\n", err)
+
+				return false, err
+			}
+
+			glog.V(networkparams.LogLevel).Infof("IPoIBNetwork %s in now in %s state",
+				ipoIBNetwork.Object.Name, ipoIBNetwork.Object.Status.State)
+
+			// returns true, nil when IPoIBNetwork is ready, this exits out of the PollUntilContextTimeout()
+			return ipoIBNetwork.Object.Status.State == networkoperator.StateReady, nil
+		})
+}

@@ -96,13 +96,16 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_RDMA_MLX_DEVICE:` mlx5 device ID corresponding to the interface port connected to Spectrum or Infiniband switch - _required_
 - `NVIDIANETWORK_RDMA_CLIENT_HOSTNAME:` RDMA Client hostname of first worker node for ib_write_bw test - _required when running the RDMA testcase_ 
 - `NVIDIANETWORK_RDMA_SERVER_HOSTNAME:` RDMA Server hostname of second worker node for ib_write_bw test - _required when running the RDMA testcase_   
-- `NVIDIANETWORK_RDMA_TEST_IMAGE:` RDMA Test Container Image that runs the entrypoint.sh script with optional arguments specified in the pod spec.  This container will clone the "https://github.com/linux-rdma/perftest" repo and builds the ib_write_bw binaries with or without cuda headers.  It will also run the ib_write_bw command with arguments either in CLient or Server mode.  Defaults to "quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.1" - _optional_
+- `NVIDIANETWORK_RDMA_TEST_IMAGE:` RDMA Test Container Image that runs the entrypoint.sh script with optional arguments specified in the pod spec.  This container will clone the "https://github.com/linux-rdma/perftest" repo and builds the ib_write_bw binaries with or without cuda headers.  It will also run the ib_write_bw command with arguments either in CLient or Server mode.  Defaults to "quay.io/wabouham/ecosys-nvidia/rdma-tools:0.0.2" - _optional_
 - `NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME`: Mellanox Ethernet Interface Name - Defaults to "ens8f0np0" if not specified - _optional_  
 - `NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME`:  Mellanox Infiniband Interface Name - Defaults to "ens8f0np0" if not specified - _optional_   
-- `NVIDIANETWORK_MACVLANNETWORK_NAME`: MacvlanNetwork Custom Resource instance name  - Defaults to name from Cluster Service Bersion alm-examples section if not specified  - _optional_ 
+- `NVIDIANETWORK_MACVLANNETWORK_NAME`: MacvlanNetwork Custom Resource instance name  - Defaults to name from Cluster Service Version alm-examples section if not specified  - _optional_ 
 - `NVIDIANETWORK_MACVLANNETWORK_IPAM_RANGE`: MacvlanNetwork Custom Resource instance IPAM or IP Address/Subnet mask range for Eth or IB interface - _required_    
-- `NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY`: MacvlanNetwork Custom Resource instance IPAM Default Gateway for specified ip address range - _required_         
-
+- `NVIDIANETWORK_MACVLANNETWORK_IPAM_GATEWAY`: MacvlanNetwork Custom Resource instance IPAM Default Gateway for specified ip address range - _required_
+- `NVIDIANETWORK_IPOIBNETWORK_NAME`: IPoIBNetwork Custom Resource instance name  - Defaults to name from Cluster Service Version alm-examples section if not specified  - _optional_
+- `NVIDIANETWORK_IPOIBNETWORK_IPAM_RANGE`: IPoIBNetwork Custom Resource instance IPAM or IP Address/Subnet mask range for Eth or IB interface - _required_
+- `export NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP1`: IPoIBNetwork Custom Resource instance IPAM first IP Address and Mask excluded from range - _required_
+- `export NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP2`: IPoIBNetwork Custom Resource instance IPAM second IP Address and Mask excluded from range - _required_
 
 It is recommended to execute the runner script through the `make run-tests` make target.
 
@@ -169,7 +172,7 @@ $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-nno-ci-logs-dir
 $ export TEST_FEATURES="nvidianetwork"
-$ export TEST_LABELS='nno,rdma'
+$ export TEST_LABELS='nno,rdma-shared-dev'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIANETWORK_CATALOGSOURCE="certified-operators"
@@ -186,14 +189,23 @@ $ export NVIDIANETWORK_DEPLOY_FROM_BUNDLE=true
 $ export NVIDIANETWORK_BUNDLE_IMAGE="nvcr.io/.../network-operator-bundle:v25.1.0-rc.2"
 $ export NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME="ens8f0np0"
 $ export NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME="ibs2f0"
-$ export NVIDIANETWORK_MACVLANNETWORK_NAME="rdmashared-net"
 $ export NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE="default"
+# RDMA Shared Device Test Link Type: Infiniband or Ethernet
+$ export NVIDIANETWORK_RDMA_LINK_TYPE="infiniband"
+# For RDMA Shared Device Ethernet:
+$ export NVIDIANETWORK_MACVLANNETWORK_NAME="rdmashared-net"
 $ export NVIDIANETWORK_RDMA_LINK_TYPE="ethernet"
 $ export NVIDIANETWORK_RDMA_MLX_DEVICE="mlx5_2"
+# For RDMA Shared Device Infiniband:
+$ export NVIDIANETWORK_RDMA_MLX_DEVICE="mlx5_3"
+$ export NVIDIANETWORK_IPOIBNETWORK_NAME="example-ipoibnetwork"
+$ export NVIDIANETWORK_IPOIBNETWORK_IPAM_RANGE=192.168.6.225/24
+$ export NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP1=192.168.6.229/30
+$ export NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP2=192.168.6.236/32
 
 
 $ make run-tests
 Executing nvidiagpu test-runner script
 scripts/test-runner.sh
-ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nno,rdma" ./tests/nvidianetwork
+ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nno,rdma-shared-dev" ./tests/nvidianetwork
 ```
