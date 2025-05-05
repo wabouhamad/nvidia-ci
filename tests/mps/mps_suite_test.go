@@ -1,12 +1,8 @@
 package mps
 
 import (
-	"fmt"
 	"runtime"
 	"testing"
-	"time"
-
-	"github.com/golang/glog"
 
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/reporter"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
@@ -32,11 +28,4 @@ var _ = JustAfterEach(func() {
 	reporter.ReportIfFailed(
 		specReport, currentFile, tsparams.MpsReporterNamespacesToDump, tsparams.MpsReporterCRDsToDump, clients.SetScheme)
 
-	dumpDir := inittools.GeneralConfig.GetDumpTestReportLocation(currentFile)
-	if dumpDir != "" {
-		artifactDir := fmt.Sprintf("%s/gpu-must-gather", dumpDir)
-		if err := reporter.RunMustGather(artifactDir, 5*time.Minute); err != nil {
-			glog.Errorf("Error running RunMustGather, %v", err)
-		}
-	}
 })
