@@ -78,7 +78,7 @@ NVIDIA GPU Operator-specific parameters for the script are controlled by the fol
 - `NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL`: specific subscription channel to upgrade to from previous version.  _required when running operator-upgrade testcase_
 - `NVIDIAGPU_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_
 - `NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`: custom certified-operators catalogsource index image for GPU package - _required when deploying fallback custom GPU catalogsource_
-- `NVIDIAGPU_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
+- `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
 
 NVIDIA Network Operator-specific (NNO) parameters for the script are controlled by the following environment variables:
 - `NVIDIANETWORK_CATALOGSOURCE`: custom catalogsource to be used.  If not specified, the default "certified-operators" catalog is used - _optional_
@@ -88,7 +88,7 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_SUBSCRIPTION_UPGRADE_TO_CHANNEL`: specific subscription channel to upgrade to from previous version.  _required when running operator-upgrade testcase_
 - `NVIDIANETWORK_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_
 - `NVIDIANETWORK_NNO_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`: custom certified-operators catalogsource index image for GPU package - _required when deploying fallback custom NNO catalogsource_
-- `NVIDIANETWORK_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
+- `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
 - `NVIDIANETWORK_OFED_DRIVER_VERSION`: OFED Driver Version.  If not specified, the default driver version is used - _optional_    
 - `NVIDIANETWORK_OFED_REPOSITORY`:  OFED Driver Repository.   If not specified, the default repository is used - _optional_            
 - `NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE`:  RDMA workload pod namespace - _required_
@@ -162,7 +162,7 @@ $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE="g4dn.xlarge"
 $ export NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/certified-operator-index:v4.16"
-$ export NVIDIAGPU_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/redhat-operator-index:v4.17"
+$ export NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/redhat-operator-index:v4.17"
 $ make run-tests
 ```
 
@@ -178,7 +178,7 @@ $ export VERBOSE_LEVEL=100
 $ export NVIDIANETWORK_CATALOGSOURCE="certified-operators"
 $ export NVIDIANETWORK_SUBSCRIPTION_CHANNEL="v24.7"
 $ export NVIDIANETWORK_NNO_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/certified-operator-index:v4.17"
-$ export NVIDIANETWORK_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/redhat-operator-index:v4.17"
+$ export NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/redhat-operator-index:v4.17"
 $ export NVIDIANETWORK_OFED_DRIVER_VERSION="25.01-0.6.0.0-0"
 $ export NVIDIANETWORK_OFED_REPOSITORY="quay.io/wabouham/ecosys-nvidia"
 $ export NVIDIANETWORK_RDMA_CLIENT_HOSTNAME=nvd-srv-3.nvidia.eng.redhat.com
