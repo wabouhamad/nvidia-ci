@@ -78,7 +78,7 @@ NVIDIA GPU Operator-specific parameters for the script are controlled by the fol
 - `NVIDIAGPU_SUBSCRIPTION_UPGRADE_TO_CHANNEL`: specific subscription channel to upgrade to from previous version.  _required when running operator-upgrade testcase_
 - `NVIDIAGPU_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_
 - `NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`: custom certified-operators catalogsource index image for GPU package - _required when deploying fallback custom GPU catalogsource_
-- `NVIDIAGPU_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
+- `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
 
 NVIDIA Network Operator-specific (NNO) parameters for the script are controlled by the following environment variables:
 - `NVIDIANETWORK_CATALOGSOURCE`: custom catalogsource to be used.  If not specified, the default "certified-operators" catalog is used - _optional_
@@ -88,7 +88,7 @@ NVIDIA Network Operator-specific (NNO) parameters for the script are controlled 
 - `NVIDIANETWORK_SUBSCRIPTION_UPGRADE_TO_CHANNEL`: specific subscription channel to upgrade to from previous version.  _required when running operator-upgrade testcase_
 - `NVIDIANETWORK_CLEANUP`: boolean flag to cleanup up resources created by testcase after testcase execution - Default value is true - _required only when cleanup is not needed_
 - `NVIDIANETWORK_NNO_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`: custom certified-operators catalogsource index image for GPU package - _required when deploying fallback custom NNO catalogsource_
-- `NVIDIANETWORK_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
+- `NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE`:  custom redhat-operators catalogsource index image for NFD package - _required when deploying fallback custom NFD catalogsource_
 - `NVIDIANETWORK_OFED_DRIVER_VERSION`: OFED Driver Version.  If not specified, the default driver version is used - _optional_    
 - `NVIDIANETWORK_OFED_REPOSITORY`:  OFED Driver Repository.   If not specified, the default repository is used - _optional_            
 - `NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE`:  RDMA workload pod namespace - _required_
@@ -162,7 +162,7 @@ $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIAGPU_GPU_MACHINESET_INSTANCE_TYPE="g4dn.xlarge"
 $ export NVIDIAGPU_GPU_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/certified-operator-index:v4.16"
-$ export NVIDIAGPU_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/redhat-operator-index:v4.17"
+$ export NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/redhat-operator-index:v4.17"
 $ make run-tests
 ```
 
@@ -172,13 +172,13 @@ $ export KUBECONFIG=/path/to/kubeconfig
 $ export DUMP_FAILED_TESTS=true
 $ export REPORTS_DUMP_DIR=/tmp/nvidia-nno-ci-logs-dir
 $ export TEST_FEATURES="nvidianetwork"
-$ export TEST_LABELS='nno,rdma-shared-dev'
+$ export TEST_LABELS='nno,rdma'
 $ export TEST_TRACE=true
 $ export VERBOSE_LEVEL=100
 $ export NVIDIANETWORK_CATALOGSOURCE="certified-operators"
 $ export NVIDIANETWORK_SUBSCRIPTION_CHANNEL="v24.7"
 $ export NVIDIANETWORK_NNO_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/certified-operator-index:v4.17"
-$ export NVIDIANETWORK_NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/redhat-operator-index:v4.17"
+$ export NFD_FALLBACK_CATALOGSOURCE_INDEX_IMAGE="registry.redhat.io/redhat/redhat-operator-index:v4.17"
 $ export NVIDIANETWORK_OFED_DRIVER_VERSION="25.01-0.6.0.0-0"
 $ export NVIDIANETWORK_OFED_REPOSITORY="quay.io/wabouham/ecosys-nvidia"
 $ export NVIDIANETWORK_RDMA_CLIENT_HOSTNAME=nvd-srv-3.nvidia.eng.redhat.com
@@ -189,23 +189,14 @@ $ export NVIDIANETWORK_DEPLOY_FROM_BUNDLE=true
 $ export NVIDIANETWORK_BUNDLE_IMAGE="nvcr.io/.../network-operator-bundle:v25.1.0-rc.2"
 $ export NVIDIANETWORK_MELLANOX_ETH_INTERFACE_NAME="ens8f0np0"
 $ export NVIDIANETWORK_MELLANOX_IB_INTERFACE_NAME="ibs2f0"
-$ export NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE="default"
-# RDMA Shared Device Test Link Type: Infiniband or Ethernet
-$ export NVIDIANETWORK_RDMA_LINK_TYPE="infiniband"
-# For RDMA Shared Device Ethernet:
 $ export NVIDIANETWORK_MACVLANNETWORK_NAME="rdmashared-net"
+$ export NVIDIANETWORK_RDMA_WORKLOAD_NAMESPACE="default"
 $ export NVIDIANETWORK_RDMA_LINK_TYPE="ethernet"
 $ export NVIDIANETWORK_RDMA_MLX_DEVICE="mlx5_2"
-# For RDMA Shared Device Infiniband:
-$ export NVIDIANETWORK_RDMA_MLX_DEVICE="mlx5_3"
-$ export NVIDIANETWORK_IPOIBNETWORK_NAME="example-ipoibnetwork"
-$ export NVIDIANETWORK_IPOIBNETWORK_IPAM_RANGE=192.168.6.225/24
-$ export NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP1=192.168.6.229/30
-$ export NVIDIANETWORK_IPOIBNETWORK_IPAM_EXCLUDEIP2=192.168.6.236/32
 
 
 $ make run-tests
 Executing nvidiagpu test-runner script
 scripts/test-runner.sh
-ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nno,rdma-shared-dev" ./tests/nvidianetwork
+ginkgo -timeout=24h --keep-going --require-suite -r -vv --trace --label-filter="nno,rdma" ./tests/nvidianetwork
 ```
