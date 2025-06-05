@@ -256,10 +256,16 @@ func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, 
 	if podName == "" || namespace == "" || nodeName == "" {
 		return "", fmt.Errorf("podName, namespace, and nodeName cannot be empty")
 	}
+	// Check if pod already exists
+	_, err := clientset.Pods(namespace).Get(context.TODO(), podName, metav1.GetOptions{})
+	if err == nil {
+		return "", fmt.Errorf("pod %s already exists in namespace %s", podName, namespace)
+	}
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: podName,
+			Name:      podName,
+			Namespace: namespace,
 		},
 		Spec: corev1.PodSpec{
 			HostPID:       true,
@@ -295,7 +301,7 @@ func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, 
 		},
 	}
 
-	_, err := clientset.Pods(namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
+	_, err = clientset.Pods(namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to create pod: %v", err)
 	}
@@ -328,7 +334,10 @@ func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, 
 	if !completed {
 		return "", fmt.Errorf("timed out waiting for pod to complete")
 	}
-	time.Sleep(30 * time.Second)
+
+	// Brief delay to ensure logs are fully available
+	time.Sleep(5 * time.Second)
+
 	logs, err := GetPodLogs(clientset, namespace, podName)
 	if err != nil {
 		return "", fmt.Errorf("pod completed with phase %s but failed to get logs: %v", phase, err)
