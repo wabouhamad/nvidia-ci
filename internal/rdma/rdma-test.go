@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
@@ -236,8 +237,25 @@ func ValidateRDMAResults(results map[string]string) (bool, error) {
 	return true, nil
 }
 
-// DeleteMofedDeiverNode delete mofed inventory.
-func DeleteMofedDeiverNode(clientset *clients.Settings, podName, namespace, nodeName string) (string, error) {
+// DeleteMofedRpmDir deletes mofed driver inventory on a specific node.
+func DeleteMofedRpmDir(clientset *clients.Settings, podName, namespace, nodeName string) (string, error) {
+	commands := []string{
+		"sh",
+		"-c",
+		"if [ -d /host/opt/mofed-container/inventory ];" +
+			"then rm -rf /host/opt/mofed-container/inventory" +
+			"&& echo 'Successfully deleted mofed inventory';" +
+			"else echo 'Directory not found: /opt/mofed-container/inventory'; fi"}
+	return RunCommandsOnSpecificNode(clientset, podName, namespace, nodeName, commands)
+
+}
+
+// RunCommandsOnSpecificNode runs commands on a specific node by creating a pod on that node.
+func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, nodeName string, commands []string) (string, error) {
+	// Validate input parameters
+	if podName == "" || namespace == "" || nodeName == "" {
+		return "", fmt.Errorf("podName, namespace, and nodeName cannot be empty")
+	}
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -261,8 +279,8 @@ func DeleteMofedDeiverNode(clientset *clients.Settings, podName, namespace, node
 			Containers: []corev1.Container{
 				{
 					Name:    "debugger",
-					Image:   "busybox",
-					Command: []string{"sh", "-c", "rm -rf /host/opt/mofed-container/inventory"},
+					Image:   "quay.io/wabouham/ecosys-nvidia/ubi9-tools:0.0.1",
+					Command: commands,
 					SecurityContext: &corev1.SecurityContext{
 						Privileged: boolPtr(true),
 					},
@@ -310,7 +328,7 @@ func DeleteMofedDeiverNode(clientset *clients.Settings, podName, namespace, node
 	if !completed {
 		return "", fmt.Errorf("timed out waiting for pod to complete")
 	}
-
+	time.Sleep(30 * time.Second)
 	logs, err := GetPodLogs(clientset, namespace, podName)
 	if err != nil {
 		return "", fmt.Errorf("pod completed with phase %s but failed to get logs: %v", phase, err)
