@@ -148,10 +148,6 @@ func ptrInt64(i int64) *int64 {
 	return &i
 }
 
-func ptrInt64(i int64) *int64 {
-	return &i
-}
-
 // GetMyServerIP retrieve pod interface ip.
 func GetMyServerIP(clientset *clients.Settings, podName, podNamespace, podinterface string) (string, error) {
 	pod, err := clientset.Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{})
@@ -348,9 +344,9 @@ func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, 
 			},
 			Containers: []corev1.Container{
 				{
-					Name:    "debugger",
+					Name: "debugger",
 
-					Image:   debugNodePodImageName[clusterArch],
+					Image: debugNodePodImageName[clusterArch],
 
 					Command: commands,
 					SecurityContext: &corev1.SecurityContext{
