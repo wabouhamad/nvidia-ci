@@ -144,6 +144,9 @@ func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, cr
 func boolPtr(b bool) *bool {
 	return &b
 }
+func ptrInt64(i int64) *int64 {
+	return &i
+}
 
 func ptrInt64(i int64) *int64 {
 	return &i
@@ -295,6 +298,7 @@ func ValidateRDMAResults(results map[string]string) (bool, error) {
 
 // DeleteMofedRpmDir deletes mofed driver inventory dir on a specific node.
 func DeleteMofedRpmDir(clientset *clients.Settings, podName, namespace, clusterArch, nodeName string) (string, error) {
+
 	commands := []string{
 		"sh",
 		"-c",
@@ -302,13 +306,16 @@ func DeleteMofedRpmDir(clientset *clients.Settings, podName, namespace, clusterA
 			"then rm -rf /host/opt/mofed-container/inventory" +
 			"&& echo 'Successfully deleted mofed inventory';" +
 			"else echo 'Directory not found: /opt/mofed-container/inventory'; fi"}
+
 	return RunCommandsOnSpecificNode(clientset, podName, namespace, clusterArch, nodeName, commands)
 
 }
 
 // RunCommandsOnSpecificNode runs commands on a specific node by creating a pod on that node.
+
 func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, clusterArch, nodeName string,
 	commands []string) (string, error) {
+
 	// Validate input parameters
 	if podName == "" || namespace == "" || nodeName == "" {
 		return "", fmt.Errorf("podName, namespace, and nodeName cannot be empty")
@@ -342,7 +349,9 @@ func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, 
 			Containers: []corev1.Container{
 				{
 					Name:    "debugger",
+
 					Image:   debugNodePodImageName[clusterArch],
+
 					Command: commands,
 					SecurityContext: &corev1.SecurityContext{
 						Privileged: boolPtr(true),
