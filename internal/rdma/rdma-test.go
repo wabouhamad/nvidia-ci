@@ -28,14 +28,26 @@ var (
 		"ethernet":   "rdma/rdma_shared_device_eth",
 		"infiniband": "rdma/rdma_shared_device_ib",
 	}
+
+	// image based on cluster architecture
+	debugNodePodImageName = map[string]string{
+		"amd64": "quay.io/wabouham/ecosys-nvidia/ubi9-tools:0.0.1",
+		"arm64": "quay.io/wabouham/ecosys-nvidia/ubi9-tools-arm64:0.0.1",
+	}
+)
+
+const (
+	RdmaLegacySriovResourceName corev1.ResourceName = "openshift.io/sriovlegacy"
+	gpuResourceName             corev1.ResourceName = "nvidia.com/gpu"
 )
 
 // CreateRdmaWorkloadPod create RDMA worker pod.
 func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, crName,
-	image, linkType, serverIP string) *corev1.Pod {
+	image, linkType, serverIP string, rdmaNetworkType string) *corev1.Pod {
 
 	var (
-		args []string
+		args          []string
+		rdmaResources corev1.ResourceRequirements
 	)
 
 	if mode == "server" {
@@ -43,6 +55,56 @@ func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, cr
 	} else {
 		args = []string{"-c", withCuda, "-m", mode, "-n", "net1", "-d", device, "-i", serverIP}
 	}
+
+	if rdmaNetworkType == "sriov" {
+
+		if withCuda == "yes" {
+			rdmaResources = corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					gpuResourceName:             resource.MustParse("1"),
+					RdmaLegacySriovResourceName: resource.MustParse("1"),
+				},
+				Requests: corev1.ResourceList{
+					gpuResourceName:             resource.MustParse("1"),
+					RdmaLegacySriovResourceName: resource.MustParse("1"),
+				},
+			}
+		} else {
+			rdmaResources = corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					RdmaLegacySriovResourceName: resource.MustParse("1"),
+				},
+				Requests: corev1.ResourceList{
+					RdmaLegacySriovResourceName: resource.MustParse("1"),
+				},
+			}
+		}
+
+	} else if rdmaNetworkType == "shared-device" || rdmaNetworkType == "undefined" {
+
+		if withCuda == "yes" {
+			rdmaResources = corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					gpuResourceName:                        resource.MustParse("1"),
+					RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
+				},
+				Requests: corev1.ResourceList{
+					gpuResourceName:                        resource.MustParse("1"),
+					RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
+				},
+			}
+		} else {
+			rdmaResources = corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
+				},
+				Requests: corev1.ResourceList{
+					RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
+				},
+			}
+		}
+	}
+	// Add case for HostDevice in future
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -70,14 +132,7 @@ func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, cr
 							Add: []corev1.Capability{"IPC_LOCK"},
 						},
 					},
-					Resources: corev1.ResourceRequirements{
-						Limits: corev1.ResourceList{
-							RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
-						},
-						Requests: corev1.ResourceList{
-							RdmaSharedDeviceResourceName[linkType]: resource.MustParse("1"),
-						},
-					},
+					Resources: rdmaResources,
 				},
 			},
 		},
@@ -89,6 +144,10 @@ func CreateRdmaWorkloadPod(name, namespace, withCuda, mode, hostname, device, cr
 func boolPtr(b bool) *bool {
 	return &b
 }
+func ptrInt64(i int64) *int64 {
+	return &i
+}
+
 func ptrInt64(i int64) *int64 {
 	return &i
 }
@@ -237,8 +296,9 @@ func ValidateRDMAResults(results map[string]string) (bool, error) {
 	return true, nil
 }
 
-// DeleteMofedRpmDir deletes mofed driver inventory on a specific node.
-func DeleteMofedRpmDir(clientset *clients.Settings, podName, namespace, nodeName string) (string, error) {
+// DeleteMofedRpmDir deletes mofed driver inventory dir on a specific node.
+func DeleteMofedRpmDir(clientset *clients.Settings, podName, namespace, clusterArch, nodeName string) (string, error) {
+
 	commands := []string{
 		"sh",
 		"-c",
@@ -246,12 +306,16 @@ func DeleteMofedRpmDir(clientset *clients.Settings, podName, namespace, nodeName
 			"then rm -rf /host/opt/mofed-container/inventory" +
 			"&& echo 'Successfully deleted mofed inventory';" +
 			"else echo 'Directory not found: /opt/mofed-container/inventory'; fi"}
-	return RunCommandsOnSpecificNode(clientset, podName, namespace, nodeName, commands)
+
+	return RunCommandsOnSpecificNode(clientset, podName, namespace, clusterArch, nodeName, commands)
 
 }
 
 // RunCommandsOnSpecificNode runs commands on a specific node by creating a pod on that node.
-func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, nodeName string, commands []string) (string, error) {
+
+func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, clusterArch, nodeName string,
+	commands []string) (string, error) {
+
 	// Validate input parameters
 	if podName == "" || namespace == "" || nodeName == "" {
 		return "", fmt.Errorf("podName, namespace, and nodeName cannot be empty")
@@ -285,7 +349,9 @@ func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, 
 			Containers: []corev1.Container{
 				{
 					Name:    "debugger",
-					Image:   "quay.io/wabouham/ecosys-nvidia/ubi9-tools:0.0.1",
+
+					Image:   debugNodePodImageName[clusterArch],
+
 					Command: commands,
 					SecurityContext: &corev1.SecurityContext{
 						Privileged: boolPtr(true),
