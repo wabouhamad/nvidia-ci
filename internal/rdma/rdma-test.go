@@ -148,14 +148,6 @@ func ptrInt64(i int64) *int64 {
 	return &i
 }
 
-func ptrInt64(i int64) *int64 {
-	return &i
-}
-
-func ptrInt64(i int64) *int64 {
-	return &i
-}
-
 // GetMyServerIP retrieve pod interface ip.
 func GetMyServerIP(clientset *clients.Settings, podName, podNamespace, podinterface string) (string, error) {
 	pod, err := clientset.Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{})
@@ -300,14 +292,9 @@ func ValidateRDMAResults(results map[string]string) (bool, error) {
 	return true, nil
 }
 
-<<<<<<< HEAD
 // DeleteMofedRpmDir deletes mofed driver inventory dir on a specific node.
 func DeleteMofedRpmDir(clientset *clients.Settings, podName, namespace, clusterArch, nodeName string) (string, error) {
 
-=======
-// DeleteMofedRpmDir deletes mofed driver inventory on a specific node.
-func DeleteMofedRpmDir(clientset *clients.Settings, podName, namespace, clusterArch, nodeName string) (string, error) {
->>>>>>> b01d42a (Add support for Legacy SRIOV RDMA testcase)
 	commands := []string{
 		"sh",
 		"-c",
@@ -315,24 +302,16 @@ func DeleteMofedRpmDir(clientset *clients.Settings, podName, namespace, clusterA
 			"then rm -rf /host/opt/mofed-container/inventory" +
 			"&& echo 'Successfully deleted mofed inventory';" +
 			"else echo 'Directory not found: /opt/mofed-container/inventory'; fi"}
-<<<<<<< HEAD
 
-=======
->>>>>>> b01d42a (Add support for Legacy SRIOV RDMA testcase)
 	return RunCommandsOnSpecificNode(clientset, podName, namespace, clusterArch, nodeName, commands)
 
 }
 
 // RunCommandsOnSpecificNode runs commands on a specific node by creating a pod on that node.
-<<<<<<< HEAD
 
 func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, clusterArch, nodeName string,
 	commands []string) (string, error) {
 
-=======
-func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, clusterArch, nodeName string,
-	commands []string) (string, error) {
->>>>>>> b01d42a (Add support for Legacy SRIOV RDMA testcase)
 	// Validate input parameters
 	if podName == "" || namespace == "" || nodeName == "" {
 		return "", fmt.Errorf("podName, namespace, and nodeName cannot be empty")
@@ -365,14 +344,10 @@ func RunCommandsOnSpecificNode(clientset *clients.Settings, podName, namespace, 
 			},
 			Containers: []corev1.Container{
 				{
-					Name:    "debugger",
-<<<<<<< HEAD
+					Name: "debugger",
 
-					Image:   debugNodePodImageName[clusterArch],
+					Image: debugNodePodImageName[clusterArch],
 
-=======
-					Image:   debugNodePodImageName[clusterArch],
->>>>>>> b01d42a (Add support for Legacy SRIOV RDMA testcase)
 					Command: commands,
 					SecurityContext: &corev1.SecurityContext{
 						Privileged: boolPtr(true),
