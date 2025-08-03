@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
 	"time"
 
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/inittools"
@@ -24,7 +25,6 @@ import (
 	"github.com/operator-framework/api/pkg/operators/v1alpha1"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/check"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/deploy"
-	"github.com/rh-ecosystem-edge/nvidia-ci/internal/get"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/networkparams"
 	internalNFD "github.com/rh-ecosystem-edge/nvidia-ci/internal/nfd"
 	"github.com/rh-ecosystem-edge/nvidia-ci/internal/tsparams"
@@ -141,16 +141,6 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 	Context("DeployNNO", Label("deploy-nno-with-dtk"), func() {
 
 		BeforeAll(func() {
-
-			By("Get Cluster Architecture from first Nvidia Network enabled worker node")
-			glog.V(networkparams.LogLevel).Infof("Getting cluster architecture from nodes with "+
-				"networkWorkerNodeSelector: %v", WorkerNodeSelector)
-			clusterArch, err := get.GetClusterArchitecture(inittools.APIClient, WorkerNodeSelector)
-			Expect(err).ToNot(HaveOccurred(), "error getting cluster architecture:  %v ", err)
-
-			clusterArchitecture = clusterArch
-			glog.V(networkparams.LogLevel).Infof("cluster architecture for network enabled worker node "+
-				"is: %s", clusterArchitecture)
 
 			if nvidiaNetworkConfig.CatalogSource == "" {
 				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_CATALOGSOURCE"+
@@ -316,16 +306,6 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 				rdmaServerHostname = nvidiaNetworkConfig.RdmaServerHostname
 				glog.V(networkparams.LogLevel).Infof("rdmaServerHostname is set to env variable "+
 					"NVIDIANETWORK_RDMA_SERVER_HOSTNAME value '%v'", rdmaServerHostname)
-			}
-
-			if nvidiaNetworkConfig.RdmaTestImage == "" {
-				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_TEST_IMAGE"+
-					" is not set, will use default container image '%s'", rdmaTestImageDefault[clusterArchitecture])
-				rdmaTestImage = rdmaTestImageDefault[clusterArchitecture]
-			} else {
-				rdmaTestImage = nvidiaNetworkConfig.RdmaTestImage
-				glog.V(networkparams.LogLevel).Infof("rdmaTestImage is set to env variable "+
-					"NVIDIANETWORK_RDMA_TEST_IMAGE value '%v'", rdmaTestImage)
 			}
 
 			if nvidiaNetworkConfig.RdmaWorkloadNamespace == "" {
@@ -505,6 +485,27 @@ var _ = Describe("NNO", Ordered, Label(tsparams.LabelSuite), func() {
 			}
 
 			nfd.EnsureNFDIsInstalled(inittools.APIClient, nfdInstance, ocpVersion, networkparams.LogLevel)
+
+			// After NFD is installed, we can network operator enabled worker node architecture
+			By("Get Cluster Architecture from first NVIDIA Network enabled worker node")
+			glog.V(networkparams.LogLevel).Infof("Getting cluster architecture from nodes with "+
+				"networkWorkerNodeSelector: %v", WorkerNodeSelector)
+			clusterArch, err := get.GetClusterArchitecture(inittools.APIClient, WorkerNodeSelector)
+			Expect(err).ToNot(HaveOccurred(), "error getting cluster architecture:  %v ", err)
+
+			clusterArchitecture = clusterArch
+			glog.V(networkparams.LogLevel).Infof("cluster architecture for NVIDIA Network enabled worker node "+
+				"is: %s", clusterArchitecture)
+
+			if nvidiaNetworkConfig.RdmaTestImage == "" {
+				glog.V(networkparams.LogLevel).Infof("env variable NVIDIANETWORK_RDMA_TEST_IMAGE"+
+					" is not set, will use default container image '%s'", rdmaTestImageDefault[clusterArchitecture])
+				rdmaTestImage = rdmaTestImageDefault[clusterArchitecture]
+			} else {
+				rdmaTestImage = nvidiaNetworkConfig.RdmaTestImage
+				glog.V(networkparams.LogLevel).Infof("rdmaTestImage is set to env variable "+
+					"NVIDIANETWORK_RDMA_TEST_IMAGE value '%v'", rdmaTestImage)
+			}
 
 		})
 
