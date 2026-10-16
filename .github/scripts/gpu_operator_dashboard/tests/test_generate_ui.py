@@ -683,6 +683,36 @@ class TestDriverBranchRendering(TestCase):
         self.assertIn('<span class="failed-branch">615.71.09</span>', html)
         self.assertEqual(html.count("615.71.09"), 1)
 
+    def test_failed_branch_preserved_from_dropped_duplicate_row(self):
+        """Test that failure markers survive when final_results drops the row that carried them.
+
+        When the same GPU version has two runs (older failed, newer succeeded),
+        final_results picks the successful row. The failed branch marker from
+        the older row must still appear in the rendered output.
+        """
+        results = [
+            {
+                OCP_FULL_VERSION: "4.22.17",
+                GPU_OPERATOR_VERSION: "26.3.3",
+                "test_status": STATUS_FAILURE,
+                "prow_job_url": "https://example.com/job-old",
+                "job_timestamp": "1712345670",
+                DRIVER_BRANCH: "580.173.02, 615.71.09:failed",
+            },
+            {
+                OCP_FULL_VERSION: "4.22.17",
+                GPU_OPERATOR_VERSION: "26.3.3",
+                "test_status": STATUS_SUCCESS,
+                "prow_job_url": "https://example.com/job-new",
+                "job_timestamp": "1712345680",
+                DRIVER_BRANCH: "580.173.02, 615.71.09",
+            },
+        ]
+        html = build_catalog_table_rows(results, show_driver_branch=True)
+
+        self.assertIn('<span class="failed-branch">615.71.09</span>', html)
+        self.assertEqual(html.count("615.71.09"), 1)
+
     def test_no_driver_branch_column_when_disabled(self):
         """Test that driver branch cell is omitted when show_driver_branch is False."""
         results = [

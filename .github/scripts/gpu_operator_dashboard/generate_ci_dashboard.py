@@ -148,7 +148,7 @@ def build_catalog_table_rows(regular_results: List[Dict[str, Any]], show_driver_
         driver_branch_cell = ""
         if show_driver_branch:
             branch_failed: dict[str, bool] = {}
-            for r in sorted_results:
+            for r in rows:
                 for b in r.get(DRIVER_BRANCH, "").split(", "):
                     b = b.strip()
                     if not b:
