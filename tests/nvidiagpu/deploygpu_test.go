@@ -976,6 +976,7 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 			glog.V(gpuparams.GpuLogLevel).Infof("Gpu-burn pod execution was successful")
 
 			var failedBranches []string
+			failedBranchSet := make(map[string]bool)
 
 			for i := 1; i < len(precompiledBranches); i++ {
 				nextBranch := precompiledBranches[i]
@@ -986,13 +987,30 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 				if branchErr != nil {
 					glog.V(gpuparams.GpuLogLevel).Infof("Branch %s FAILED: %v", nextBranch, branchErr)
 					failedBranches = append(failedBranches, fmt.Sprintf("%s: %v", nextBranch, branchErr))
+					failedBranchSet[nextBranch] = true
 				} else {
 					glog.V(gpuparams.GpuLogLevel).Infof("Branch %s PASSED", nextBranch)
 				}
 			}
 
-			Expect(failedBranches).To(BeEmpty(),
-				"The following driver branches failed:\n%s", strings.Join(failedBranches, "\n"))
+			if len(failedBranches) > 0 {
+				glog.V(gpuparams.GpuLogLevel).Infof(
+					"WARNING: %d driver branch(es) failed (test passes because at least one branch succeeded):\n%s",
+					len(failedBranches), strings.Join(failedBranches, "\n"))
+
+				var branchLines []string
+				for _, b := range precompiledBranches {
+					if failedBranchSet[b] {
+						branchLines = append(branchLines, b+":failed")
+					} else {
+						branchLines = append(branchLines, b)
+					}
+				}
+				if err := inittools.GeneralConfig.WriteReport(
+					DriverBranchVersionsFile, []byte(strings.Join(branchLines, "\n")+"\n")); err != nil {
+					glog.Error("Error updating driver branch versions file with failure info: ", err)
+				}
+			}
 
 		})
 

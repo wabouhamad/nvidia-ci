@@ -147,9 +147,21 @@ def build_catalog_table_rows(regular_results: List[Dict[str, Any]], show_driver_
 
         driver_branch_cell = ""
         if show_driver_branch:
-            branches = sorted({r.get(DRIVER_BRANCH, "") for r in sorted_results} - {""})
-            escaped = [html.escape(b) for b in branches]
-            driver_branch_cell = f'\n          <td>{", ".join(escaped)}</td>'
+            all_branches = set()
+            for r in sorted_results:
+                for b in r.get(DRIVER_BRANCH, "").split(", "):
+                    b = b.strip()
+                    if b:
+                        all_branches.add(b)
+
+            rendered = []
+            for b in sorted(all_branches, key=lambda x: x.removesuffix(":failed")):
+                if b.endswith(":failed"):
+                    name = html.escape(b.removesuffix(":failed"))
+                    rendered.append(f'<span class="failed-branch">{name}</span>')
+                else:
+                    rendered.append(html.escape(b))
+            driver_branch_cell = f'\n          <td>{", ".join(rendered)}</td>'
 
         rows_html += f"""
         <tr>

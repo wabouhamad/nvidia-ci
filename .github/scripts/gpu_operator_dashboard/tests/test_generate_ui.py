@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from gpu_operator_dashboard.generate_ci_dashboard import (
     build_bundle_info, build_catalog_table_rows, has_valid_semantic_versions, generate_test_matrix)
 from gpu_operator_dashboard.fetch_ci_data import (
-    OCP_FULL_VERSION, GPU_OPERATOR_VERSION, STATUS_ABORTED, STATUS_SUCCESS, STATUS_FAILURE)
+    OCP_FULL_VERSION, GPU_OPERATOR_VERSION, DRIVER_BRANCH,
+    STATUS_ABORTED, STATUS_SUCCESS, STATUS_FAILURE)
 
 
 class TestBuildBundleInfo(TestCase):
@@ -612,6 +613,65 @@ class TestGenerateTestMatrix(TestCase):
         self.assertNotIn('invalid-gpu-job', html_result)
         self.assertNotIn('aborted-job', html_result)
         self.assertNotIn('23.8.0', html_result)
+
+
+class TestDriverBranchRendering(TestCase):
+    """Test cases for driver branch column rendering, including failed-branch markers."""
+
+    def test_failed_branches_rendered_in_red(self):
+        """Test that branches with :failed suffix get the failed-branch CSS class."""
+        results = [
+            {
+                OCP_FULL_VERSION: "4.22.17",
+                GPU_OPERATOR_VERSION: "26.3.3",
+                "test_status": STATUS_SUCCESS,
+                "prow_job_url": "https://example.com/job1",
+                "job_timestamp": "1712345678",
+                DRIVER_BRANCH: "580.173.02, 595.71.05, 615.71.09:failed",
+            }
+        ]
+        html = build_catalog_table_rows(results, show_driver_branch=True)
+
+        self.assertIn("580.173.02", html)
+        self.assertIn("595.71.05", html)
+        self.assertIn('<span class="failed-branch">615.71.09</span>', html)
+        self.assertNotIn("615.71.09:failed", html)
+
+    def test_all_branches_passed(self):
+        """Test that branches without :failed suffix render as plain text."""
+        results = [
+            {
+                OCP_FULL_VERSION: "4.22.17",
+                GPU_OPERATOR_VERSION: "26.3.3",
+                "test_status": STATUS_SUCCESS,
+                "prow_job_url": "https://example.com/job1",
+                "job_timestamp": "1712345678",
+                DRIVER_BRANCH: "580.173.02, 595.71.05, 610.57.04",
+            }
+        ]
+        html = build_catalog_table_rows(results, show_driver_branch=True)
+
+        self.assertIn("580.173.02", html)
+        self.assertIn("595.71.05", html)
+        self.assertIn("610.57.04", html)
+        self.assertNotIn("failed-branch", html)
+
+    def test_no_driver_branch_column_when_disabled(self):
+        """Test that driver branch cell is omitted when show_driver_branch is False."""
+        results = [
+            {
+                OCP_FULL_VERSION: "4.22.17",
+                GPU_OPERATOR_VERSION: "26.3.3",
+                "test_status": STATUS_SUCCESS,
+                "prow_job_url": "https://example.com/job1",
+                "job_timestamp": "1712345678",
+                DRIVER_BRANCH: "580.173.02, 615.71.09:failed",
+            }
+        ]
+        html = build_catalog_table_rows(results, show_driver_branch=False)
+
+        self.assertNotIn("580.173.02", html)
+        self.assertNotIn("615.71.09", html)
 
 
 if __name__ == '__main__':
