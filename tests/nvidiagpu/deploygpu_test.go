@@ -1006,10 +1006,10 @@ var _ = Describe("GPU", Ordered, Label(tsparams.LabelSuite), func() {
 						branchLines = append(branchLines, b)
 					}
 				}
-				if err := inittools.GeneralConfig.WriteReport(
-					DriverBranchVersionsFile, []byte(strings.Join(branchLines, "\n")+"\n")); err != nil {
-					glog.Error("Error updating driver branch versions file with failure info: ", err)
-				}
+				err := inittools.GeneralConfig.WriteReport(
+					DriverBranchVersionsFile, []byte(strings.Join(branchLines, "\n")+"\n"))
+				Expect(err).ToNot(HaveOccurred(),
+					"failed to update driver branch versions file with failure markers")
 			}
 
 		})
