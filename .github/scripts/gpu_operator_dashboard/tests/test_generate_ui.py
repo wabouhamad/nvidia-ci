@@ -656,6 +656,33 @@ class TestDriverBranchRendering(TestCase):
         self.assertIn("610.57.04", html)
         self.assertNotIn("failed-branch", html)
 
+    def test_duplicate_branch_failed_wins(self):
+        """Test that when a branch appears both with and without :failed, it renders as failed."""
+        results = [
+            {
+                OCP_FULL_VERSION: "4.22.17",
+                GPU_OPERATOR_VERSION: "26.3.3",
+                "test_status": STATUS_SUCCESS,
+                "prow_job_url": "https://example.com/job1",
+                "job_timestamp": "1712345678",
+                DRIVER_BRANCH: "580.173.02, 615.71.09",
+            },
+            {
+                OCP_FULL_VERSION: "4.22.17",
+                GPU_OPERATOR_VERSION: "26.7.1",
+                "test_status": STATUS_SUCCESS,
+                "prow_job_url": "https://example.com/job2",
+                "job_timestamp": "1712345679",
+                DRIVER_BRANCH: "580.173.02, 615.71.09:failed",
+            },
+        ]
+        html = build_catalog_table_rows(results, show_driver_branch=True)
+
+        self.assertIn("580.173.02", html)
+        self.assertNotIn("failed-branch\">580.173.02", html)
+        self.assertIn('<span class="failed-branch">615.71.09</span>', html)
+        self.assertEqual(html.count("615.71.09"), 1)
+
     def test_no_driver_branch_column_when_disabled(self):
         """Test that driver branch cell is omitted when show_driver_branch is False."""
         results = [
