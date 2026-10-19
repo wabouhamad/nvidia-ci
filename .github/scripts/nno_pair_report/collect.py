@@ -11,13 +11,14 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import requests
-
 from common import gcs_utils
+
+from nno_pair_report import signed
 
 BUCKET = gcs_utils.GCS_BUCKET
 STEP_RESULT_NAME = "nno-step-result.json"
@@ -78,6 +79,7 @@ def _image(value: Any, field: str, *, required: bool) -> dict[str, str]:
         "image": str(value.get("image", "")),
         "digest": str(value.get("digest", "")),
         "doca_version": str(value.get("doca_version", "")),
+        **{key: value[key] for key in ("kernel", "architecture", "manifest_digest", "config_digest", "index_digest") if value.get(key)},
     }
     if not required:
         image["ofed_version"] = str(value.get("ofed_version", ""))
@@ -177,6 +179,7 @@ def normalize_manifest(data: Any, path: str) -> dict[str, Any]:
             "artifacts": artifacts,
             "completed_at": str(pair.get("completed_at", "")),
             "note": str(pair.get("note", "")),
+            **({"stages": pair["stages"]} if "stages" in pair else {}),
         })
 
     return {
@@ -193,6 +196,7 @@ def normalize_manifest(data: Any, path: str) -> dict[str, Any]:
             "environment": str(run.get("environment", "")),
             "status": str(run.get("status", "unknown")),
             "planned_modes": sorted(set(planned_modes)),
+            **{key: run[key] for key in ("source", "provenance", "discovery", "note") if key in run},
         },
         "pairs": normalized_pairs,
     }
@@ -511,12 +515,41 @@ def _is_step_result_name(name: str) -> bool:
     return name == STEP_RESULT_NAME or (name.startswith(STEP_RESULT_PREFIX) and name.endswith(".json"))
 
 
+def normalize_artifacts(records: list[tuple[str, dict[str, Any]]], path: str) -> dict[str, Any]:
+    """Use the signed contract only for its known source jobs."""
+    identity = source_identity(path)
+    if identity and signed.is_signed_job(identity["job_name"]):
+        if any(not isinstance(data, dict) for _, data in records):
+            raise ValueError("signed artifacts must be JSON objects")
+        try:
+            return normalize_manifest(signed.normalize(records, identity), path)
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError) as error:
+            finished = dict(records).get(identity["build_path"] + "/finished.json")
+            if signed.outcome(finished) in {"passed", "failed"}:
+                return normalize_manifest(signed.blocked_manifest(records, identity, str(error)), path)
+            raise ValueError(f"invalid signed artifact structure: {error}") from error
+    if any(isinstance(data, dict) and str(data.get("step", "")).startswith("network-operator-e2e-signed-")
+           for _, data in records):
+        raise ValueError("signed step results require a supported production job")
+    return normalize_step_results([(path, data) for path, data in records if _is_step_result_name(path.rsplit("/", 1)[-1])], path)
+
+
+def _is_report_artifact(path: str, include_metadata: bool) -> bool:
+    name = path.rsplit("/", 1)[-1]
+    identity = source_identity(path)
+    if _is_step_result_name(name):
+        return not identity or not signed.is_signed_job(identity["job_name"]) or include_metadata
+    return bool(include_metadata and identity and signed.is_signed_job(identity["job_name"]) and name in {
+        signed.REQUEST, signed.DISCOVERY, signed.WORKERS, "started.json", "finished.json",
+    })
+
+
 def load_local(root: Path) -> list[dict[str, Any]]:
     """Load per-step artifact trees and combine them into report builds."""
     if not root.is_dir():
         raise ValueError(f"input directory does not exist: {root}")
     grouped: dict[str, list[tuple[str, dict[str, Any]]]] = {}
-    step_paths = [path for path in root.rglob("*.json") if _is_step_result_name(path.name)]
+    step_paths = [path for path in root.rglob("*.json") if _is_report_artifact(path.relative_to(root).as_posix(), True)]
     for path in sorted(step_paths):
         relative_path = path.relative_to(root).as_posix()
         result = json.loads(path.read_text())
@@ -531,7 +564,7 @@ def load_local(root: Path) -> list[dict[str, Any]]:
         grouped.setdefault(build_path, []).append((relative_path, result))
 
     return [
-        normalize_step_results(steps, steps[0][0])
+        normalize_artifacts(steps, steps[0][0])
         for _, steps in sorted(grouped.items())
     ]
 
@@ -550,10 +583,15 @@ def _is_not_found(error: requests.HTTPError) -> bool:
     )
 
 
-def list_gcs_report_artifacts(prefix: str) -> list[str]:
-    """List step result files below one Prow prefix."""
-    pattern = f"{prefix}**/nno-step-result*.json"
+def list_gcs_report_artifacts(prefix: str, *, include_metadata: bool = False) -> list[str]:
+    """List sidecars and, for signed jobs, requests and Prow outcomes."""
+    names = "{nno-step-result*.json,nno-doca2-signed-request.json,nno-discovery-result.json,nno-signed-driver-images.json,started.json,finished.json}"
+    pattern = f"{prefix}**/" + (names if include_metadata else "nno-step-result*.json")
     if gcs_utils.gcsweb_enabled():
+        # The curated client implements only *, ** and ?. Apply the name filter
+        # locally instead of relying on GCS's brace expansion in that backend.
+        if include_metadata:
+            pattern = f"{prefix}**/*.json"
         paths = [item["name"] for item in gcs_utils.list_gcsweb_objects(prefix, pattern)]
     else:
         paths = []
@@ -567,7 +605,39 @@ def list_gcs_report_artifacts(prefix: str) -> list[str]:
             page_token = page.get("nextPageToken", "")
             if not page_token:
                 break
-    return sorted(path for path in paths if _is_step_result_name(path.rsplit("/", 1)[-1]))
+    return sorted(path for path in paths if _is_report_artifact(path, include_metadata))
+
+
+def list_presubmit_builds(job: str, max_builds: int | None) -> list[str]:
+    """Resolve Prow's per-job index without depending on PR merge events."""
+    if not re.fullmatch(r"pull-[A-Za-z0-9_.-]+", job):
+        raise ValueError(f"invalid presubmit job name: {job}")
+    prefix = f"pr-logs/directory/{job}/"
+    items, token = [], ""
+    while True:
+        params = {"prefix": prefix, "matchGlob": prefix + "*.txt", "maxResults": "1000",
+                  "fields": "items(name,metadata),nextPageToken"}
+        if token:
+            params["pageToken"] = token
+        page = _gcs_json(params)
+        items.extend(page.get("items", []))
+        token = page.get("nextPageToken", "")
+        if not token:
+            break
+    builds = set()
+    for item in items:
+        filename = item["name"].removeprefix(prefix)
+        if not re.fullmatch(r"\d+\.txt", filename):
+            continue
+        link = item.get("metadata", {}).get("x-goog-meta-link", "")
+        match = re.fullmatch(
+            rf"gs://{re.escape(BUCKET)}/(pr-logs/pull/rh-ecosystem-edge_nvidia-ci/\d+/"
+            + re.escape(job) + "/" + re.escape(filename[:-4]) + ")", link,
+        )
+        if not match:
+            raise ValueError(f"invalid Prow job index link: {item['name']}")
+        builds.add(match[1])
+    return sorted(builds, key=lambda path: int(path.rsplit("/", 1)[-1]), reverse=True)[:max_builds]
 
 
 def _matches_presubmit_job(path: str, job_name: str) -> bool:
@@ -580,14 +650,38 @@ def _matches_presubmit_job(path: str, job_name: str) -> bool:
 
 def load_gcs(
     pr_numbers: list[str], periodic_jobs: list[str], *,
-    presubmit_job: str | None = None, max_periodic_builds: int = 7,
+    presubmit_job: str | None = None, max_periodic_builds: int | None = 20,
+    indexed_presubmit_jobs: list[str] | None = None,
+    baseline: dict[str, Any] | None = None, lookback_hours: float | None = None,
 ) -> list[dict[str, Any]]:
     """Read step result files from public Prow artifacts.
 
-    Re-read one week of daily builds so a late upload or a missed run is still
-    collected. Older builds remain in the saved history and are not fetched again.
+    Refresh builds in the lookback window, unfinished builds, and any builds
+    missing from the baseline. Older completed builds remain in saved history.
+    The optional build cap is intended for targeted previews, not backfills.
     """
     paths: set[str] = set()
+    if max_periodic_builds is not None and max_periodic_builds < 1:
+        raise ValueError("max builds must be positive")
+    if lookback_hours is not None and lookback_hours <= 0:
+        raise ValueError("lookback hours must be positive")
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours) if lookback_hours is not None else None
+    known = {build["build_path"]: build for build in (baseline or {}).get("builds", [])}
+
+    def needs_refresh(build_path: str) -> bool:
+        previous = known.get(build_path)
+        if cutoff is None or previous is None:
+            return True
+        if previous["run"].get("status") not in {"success", "failure", "aborted", "error"}:
+            return True
+        timestamp = _started_timestamp(previous["run"].get("started_at"))
+        # Missing timestamps must not cause results to be dropped from collection.
+        return not timestamp or datetime.fromisoformat(timestamp.replace("Z", "+00:00")) >= cutoff
+
+    for job in indexed_presubmit_jobs or []:
+        for build in list_presubmit_builds(job, max_periodic_builds):
+            if needs_refresh(build):
+                paths.update(list_gcs_report_artifacts(build + "/", include_metadata=True))
     for pr in pr_numbers:
         if not pr.isdigit():
             raise ValueError(f"invalid PR number: {pr}")
@@ -598,7 +692,9 @@ def load_gcs(
                 if presubmit_job else (prefix,)
             )
             for job_prefix in job_prefixes:
-                pr_paths = list_gcs_report_artifacts(job_prefix)
+                pr_paths = list_gcs_report_artifacts(
+                    job_prefix, include_metadata=bool(presubmit_job and signed.is_signed_job(presubmit_job)),
+                )
                 paths.update(path for path in pr_paths if not presubmit_job or _matches_presubmit_job(path, presubmit_job))
     for job in periodic_jobs:
         if "/" in job or not job.startswith("periodic-"):
@@ -608,9 +704,10 @@ def load_gcs(
             build_dirs, _ = gcs_utils.list_gcsweb_directory(f"logs/{job}/")
             recent = sorted((build for build in build_dirs if build.isdigit()), key=int, reverse=True)[:max_periodic_builds]
             for build in recent:
-                paths.update(list_gcs_report_artifacts(f"logs/{job}/{build}/"))
+                if needs_refresh(f"logs/{job}/{build}"):
+                    paths.update(list_gcs_report_artifacts(f"logs/{job}/{build}/", include_metadata=signed.is_signed_job(job)))
         else:
-            job_paths = list_gcs_report_artifacts(f"logs/{job}/")
+            job_paths = list_gcs_report_artifacts(f"logs/{job}/", include_metadata=signed.is_signed_job(job))
             # Prow build IDs are increasing decimal strings. Keep all report artifacts
             # from the most recent builds, not only the first artifact per build.
             build_paths = {
@@ -625,7 +722,8 @@ def load_gcs(
             )[:max_periodic_builds])
             paths.update(
                 path for path in job_paths
-                if (identity := source_identity(path)) is not None and identity["build_path"] in recent_builds
+                if (identity := source_identity(path)) is not None
+                and identity["build_path"] in recent_builds and needs_refresh(identity["build_path"])
             )
 
     grouped: dict[str, list[str]] = {}
@@ -639,7 +737,7 @@ def load_gcs(
     for build_path, step_paths in sorted(grouped.items()):
         try:
             step_records = [(path, _fetch_gcs_json(path)) for path in sorted(step_paths)]
-            build = normalize_step_results(step_records, step_records[0][0])
+            build = normalize_artifacts(step_records, step_records[0][0])
         except ValueError as error:
             print(f"Skipping malformed build {build_path}: {error}", file=sys.stderr)
             continue
@@ -703,24 +801,39 @@ def main() -> None:
     parser.add_argument("--pr", action="append", default=[], help="PR number to fetch from public Prow GCS")
     parser.add_argument("--presubmit-job", help="Limit PR artifacts to this Prow job (including rehearsals)")
     parser.add_argument("--periodic-job", action="append", default=[], help="Periodic Prow job to fetch")
+    parser.add_argument("--indexed-presubmit-job", action="append", default=[], help="Discover recent PR builds through a Prow job index")
+    parser.add_argument("--lookback-hours", type=float, default=168, help="Refresh window in hours (default: 168 / 7 days); missing and unfinished builds are also collected")
+    parser.add_argument("--max-builds", type=int, help="Optional per-job build cap for previews; omitted by default to backfill all available history")
     parser.add_argument("--baseline", type=Path, help="Existing report JSON to merge")
     parser.add_argument("--output", required=True, type=Path, help="Report JSON output path")
     parser.add_argument("--summary-output", type=Path, help="JSON summary of artifacts fetched in this run")
     args = parser.parse_args()
-    if not args.input_dir and not args.pr and not args.periodic_job:
-        parser.error("provide --input-dir, --pr or --periodic-job")
+    if not args.input_dir and not args.pr and not args.periodic_job and not args.indexed_presubmit_job:
+        parser.error("provide --input-dir, --pr, --periodic-job or --indexed-presubmit-job")
     existing = json.loads(args.baseline.read_text()) if args.baseline and args.baseline.exists() else {}
     incoming = []
     if args.input_dir:
         incoming.extend(load_local(args.input_dir))
-    if args.pr or args.periodic_job:
-        incoming.extend(load_gcs(args.pr, args.periodic_job, presubmit_job=args.presubmit_job))
+    if args.pr or args.periodic_job or args.indexed_presubmit_job:
+        incoming.extend(load_gcs(args.pr, args.periodic_job, presubmit_job=args.presubmit_job,
+                                 indexed_presubmit_jobs=args.indexed_presubmit_job, max_periodic_builds=args.max_builds,
+                                 baseline=existing, lookback_hours=args.lookback_hours))
     result = merge_builds(existing, incoming)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     if args.summary_output:
         args.summary_output.parent.mkdir(parents=True, exist_ok=True)
-        args.summary_output.write_text(json.dumps({"fetched_builds": len(incoming)}) + "\n")
+        summary: dict[str, Any] = {"fetched_builds": len(incoming)}
+        if incoming:
+            sources: dict[str, dict[str, int]] = {}
+            for build in incoming:
+                counts = sources.setdefault(build["run"]["job_name"], {"builds": 0, "no_work": 0, "discovery_failed": 0})
+                counts["builds"] += 1
+                discovery_outcome = build["run"].get("discovery", {}).get("outcome")
+                counts["no_work"] += discovery_outcome == "no_work"
+                counts["discovery_failed"] += discovery_outcome == "failed"
+            summary["sources"] = sources
+        args.summary_output.write_text(json.dumps(summary) + "\n")
     print(f"Collected {len(incoming)} build artifacts; report has {len(result['builds'])} builds: {args.output}")
 
 

@@ -28,6 +28,8 @@ jobs:
       changed: ${{ steps.publish_diff.outputs.changed }}
     env:
       PERIODIC_JOB: ${{ inputs.periodic_job || 'periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-e2e' }}
+      SIGNED_PERIODIC_JOB: periodic-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed-auto
+      SIGNED_PR_JOB: pull-ci-rh-ecosystem-edge-nvidia-ci-main-doca2-nno-signed
       REPORT_OUTPUT: nno-pair-report-output
     steps:
       - name: Check out report code
@@ -51,13 +53,15 @@ jobs:
       - name: Install artifact client dependencies
         run: python3 -m pip install -r .github/scripts/gpu_operator_dashboard/requirements.txt
 
-      - name: Collect Prow periodic results and merge history
+      - name: Collect daily and signed Prow results and merge history
         shell: bash
         run: |
           set -euo pipefail
           args=(--output "$RUNNER_TEMP/nno-pair-report/history.json")
           args+=(--summary-output "$RUNNER_TEMP/nno-pair-report/collection.json")
           args+=(--periodic-job "$PERIODIC_JOB")
+          args+=(--periodic-job "$SIGNED_PERIODIC_JOB")
+          args+=(--indexed-presubmit-job "$SIGNED_PR_JOB" --lookback-hours 168)
           if [[ -f nno-pages-baseline/nno_doca2_history.json ]]; then
             args+=(--baseline nno-pages-baseline/nno_doca2_history.json)
           fi
