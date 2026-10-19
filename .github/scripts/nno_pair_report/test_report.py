@@ -887,11 +887,18 @@ class WorkflowOutputTests(unittest.TestCase):
             "NNO report: 1 builds fetched from Prow, 1 new builds, 2 builds in history.\n",
         )
 
-    def test_summary_without_fetched_builds(self):
+    def test_summary_uses_history_without_fetched_builds(self):
         has_data, text = workflow.summarize_collection(
             {"builds": [{"build_path": "logs/job/1"}]},
             {"fetched_builds": 0},
             {"builds": []},
+        )
+        self.assertTrue(has_data)
+        self.assertIn("retained published history", text)
+
+    def test_summary_without_history_or_fetched_builds(self):
+        has_data, text = workflow.summarize_collection(
+            {"builds": []}, {"fetched_builds": 0}, {"builds": []},
         )
         self.assertFalse(has_data)
         self.assertIn("nothing was published", text)

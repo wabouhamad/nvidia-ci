@@ -11,11 +11,11 @@ from typing import Any
 def summarize_collection(
     history: dict[str, Any], collection: dict[str, Any], baseline: dict[str, Any],
 ) -> tuple[bool, str]:
-    """Return whether any builds were fetched and the job-summary text."""
+    """Return whether usable history is available and the job-summary text."""
     old_paths = {build["build_path"] for build in baseline.get("builds", [])}
     new_paths = {build["build_path"] for build in history["builds"]}
     fetched_builds = collection["fetched_builds"]
-    has_data = fetched_builds > 0
+    has_data = fetched_builds > 0 or bool(history["builds"])
     text = (
         f"NNO report: {fetched_builds} builds fetched from Prow, "
         f"{len(new_paths - old_paths)} new builds, "
@@ -23,6 +23,11 @@ def summarize_collection(
     )
     if not has_data:
         text += "No NNO report artifacts were found; nothing was published.\n"
+    elif not fetched_builds:
+        text += "No new builds fetched; retained published history.\n"
+    for job, counts in sorted(collection.get("sources", {}).items()):
+        text += (f"- {job}: {counts['builds']} builds, {counts['no_work']} no-work, "
+                 f"{counts['discovery_failed']} discovery failure{'s' if counts['discovery_failed'] != 1 else ''}.\n")
     return has_data, text
 
 

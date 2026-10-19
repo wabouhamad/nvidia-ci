@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,8 @@ def scheduled_stability(builds: list[dict[str, Any]]) -> list[dict[str, Any]]:
         status = run.get("status", "unknown").lower()
         if status not in {"success", "failure", "aborted", "pending", "running"}:
             status = "unknown"
+        if status == "success" and run.get("discovery", {}).get("outcome") == "no_work":
+            status = "no_work"
         groups.setdefault((ocp, run["job_name"]), []).append({
             "build_id": run["build_id"],
             "started_at": run["started_at"],
@@ -37,6 +40,8 @@ def scheduled_stability(builds: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "prow_url": run["prow_url"],
             "passed_pairs": sum(pair["status"] == "passed" for pair in build["pairs"]),
             "failed_pairs": sum(pair["status"] == "failed" for pair in build["pairs"]),
+            "outcome": run.get("discovery", {}).get("outcome", ""),
+            "reason": run.get("discovery", {}).get("reason", ""),
         })
 
     return [
@@ -63,8 +68,14 @@ def mode_data(history: dict[str, Any], mode: str) -> dict[str, Any]:
             pair_mode = "signed" if validation == "precompiled" else pair["mode"]
             if pair_mode != mode or validation not in ({"signed", "precompiled"} if mode == "signed" else {"dynamic"}):
                 continue
-            if pair_mode != pair["mode"]:
-                pair = {**pair, "mode": pair_mode}
+            if pair_mode != pair["mode"] or pair.get("validation") != validation:
+                pair = {**pair, "mode": pair_mode, "validation": validation}
+            image_target = re.search(
+                r"-((?:rhcos|rhel)\d+(?:\.\d+)+)-(amd64|arm64|ppc64le|s390x)$",
+                pair["driver_requested"].get("image", ""),
+            )
+            if image_target:
+                pair = {**pair, "image_target": f"{image_target[1]} / {image_target[2]}"}
             if mode == "standard" and pair["status"] == "passed" and pair["checks"].get("rdma_gpudirect") != "passed":
                 checks = {**pair["checks"]}
                 checks.setdefault("rdma_gpudirect", "blocked")
@@ -93,7 +104,7 @@ def render_explorer_html(data: dict[str, Any], label: str) -> str:
             .replace("__MATRIX_FILE__", html.escape(MATRIX_OUTPUT_NAMES[mode] + ".html"))
             .replace("__OTHER_LABEL__", html.escape("Signed DOCA/OFED" if other == "signed" else "Standard"))
             .replace("__VALIDATION_NOTE__", html.escape(
-                "The signed report currently uses precompiled OFED image selection and deployment results; RDMA and signature checks are not part of that step." if mode == "signed" else
+                "Signed flows validate the requested driver on both RDMA workers and require GPUDirect RDMA. Historical precompiled results cover selection and deployment only. No cryptographic signature or Secure Boot check is recorded." if mode == "signed" else
                 "Dynamic OFED pairs require GPUDirect RDMA to pass."
             ))
             .replace("__REPORT_DATA__", safe_report_data(data)))
