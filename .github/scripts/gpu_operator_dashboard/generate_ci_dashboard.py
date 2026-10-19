@@ -17,7 +17,36 @@ from gpu_operator_dashboard.fetch_ci_data import (
 DEFAULT_TITLE = "Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift"
 
 
-def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]], title: str = DEFAULT_TITLE) -> str:
+TOPBAR_LINKS = [
+    ("https://drivers.okoyl.xyz/groups/nvidia-gpu", "Driver delivery (VPN)"),
+]
+
+
+def build_topbar(sibling_url: str, sibling_label: str) -> str:
+    """Build a top-right navigation bar with external links and sibling dashboard toggle."""
+    links = []
+    for url, label in TOPBAR_LINKS:
+        safe_url = html.escape(url, quote=True)
+        safe_label = html.escape(label)
+        links.append(
+            f'<a href="{safe_url}" style="color:#009688; text-decoration:underline; text-underline-offset:2px;">'
+            f'{safe_label} →</a>')
+    if sibling_url and sibling_label:
+        safe_url = html.escape(sibling_url, quote=True)
+        safe_label = html.escape(sibling_label)
+        links.append(
+            f'<a href="{safe_url}" style="color:#009688; text-decoration:underline; text-underline-offset:2px;">'
+            f'View {safe_label} matrix →</a>')
+    if not links:
+        return ""
+    return (
+        f'  <div style="display:flex; justify-content:flex-end; gap:20px; margin-bottom:10px; font-size:14px;">'
+        f'{"".join(links)}</div>'
+    )
+
+
+def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]], title: str = DEFAULT_TITLE,
+                         sibling_url: str = "", sibling_label: str = "") -> str:
     """
     Build the final HTML report by:
       1. Reading the header template,
@@ -26,6 +55,7 @@ def generate_test_matrix(ocp_data: Dict[str, Dict[str, Any]], title: str = DEFAU
     """
     header_template = load_template("header.html")
     header_template = header_template.replace(DEFAULT_TITLE, title)
+    header_template = header_template.replace("{sibling_link}", build_topbar(sibling_url, sibling_label))
     html_content = header_template
     main_table_template = load_template("main_table.html")
     sorted_ocp_keys = sorted(ocp_data.keys(), reverse=True)
@@ -229,13 +259,19 @@ def main():
                         help="Path to the file containing the versions for the dashboard")
     parser.add_argument("--title", default=DEFAULT_TITLE,
                         help="Dashboard title (default: %(default)s)")
+    parser.add_argument("--sibling-url", default="",
+                        help="URL of the sibling dashboard (e.g. precompiled/signed or standard)")
+    parser.add_argument("--sibling-label", default="",
+                        help="Label for the sibling dashboard link (e.g. 'Precompiled/Signed' or 'Standard')")
     args = parser.parse_args()
     with open(args.dashboard_data_filepath, "r") as f:
         ocp_data = json.load(f)
     logger.info(
         f"Loaded JSON data with keys: {list(ocp_data.keys())} from {args.dashboard_data_filepath}")
 
-    html_content = generate_test_matrix(ocp_data, title=args.title)
+    html_content = generate_test_matrix(ocp_data, title=args.title,
+                                        sibling_url=args.sibling_url,
+                                        sibling_label=args.sibling_label)
 
     with open(args.dashboard_html_filepath, "w", encoding="utf-8") as f:
         f.write(html_content)
