@@ -35,23 +35,29 @@ class DiscoveryTests(unittest.TestCase):
             url = 'https://api.openshift.com/api/assisted-install/v2/openshift-versions?only_latest=false&version=4.22'
             catalog = {'4.22.15': {'cpu_architectures': ['x86_64', 'arm64']}}
             keys = []
+            helper = 'assisted-versions.py'
             def ssh(arguments, **kwargs):
                 key = Path(arguments[arguments.index('-i') + 1])
                 keys.append(key)
                 self.assertEqual(key.read_bytes(), b'existing-key\n')
                 self.assertEqual(key.stat().st_mode & 0o777, 0o600)
                 self.assertEqual(arguments[-2], 'root@lab.example')
-                self.assertEqual(d.shlex.split(arguments[-1]), ['python3', '-', url])
-                self.assertEqual(kwargs['input'], Path(__file__).with_name('assisted-versions.py').read_bytes())
+                expected = ['python3', '-', url] if helper else [
+                    'curl', '--fail', '--silent', '--show-error', '--max-time', '60', '--', url]
+                self.assertEqual(d.shlex.split(arguments[-1]), expected)
+                self.assertEqual(kwargs['input'], Path(__file__).with_name(helper).read_bytes() if helper else b'')
                 self.assertTrue(kwargs['capture_output'])
                 return SimpleNamespace(returncode=0, stdout=json.dumps(catalog).encode())
             with patch.object(d.subprocess, 'run', side_effect=ssh):
                 self.assertEqual(d.installer_versions(profile, url), catalog)
-            self.assertFalse(keys[0].exists())
+                helper = None
+                url = d.CATALOG_API + '?page=0&sort_by=repositories.push_date%5Bdesc%5D'
+                self.assertEqual(d.lab_json(profile, url), catalog)
+            self.assertTrue(all(not key.exists() for key in keys))
             for returncode, data in [(1, b'private-token'), (0, b'private-token'), (0, b'[]')]:
                 with patch.object(d.subprocess, 'run', return_value=SimpleNamespace(returncode=returncode, stdout=data)):
                     with self.assertRaises(ValueError) as failure:
-                        d.installer_versions(profile, url)
+                        d.lab_json(profile, url, helper)
                     self.assertNotIn('private-token', str(failure.exception))
 
     def test_remote_helper_queries_full_catalog_without_outputting_token(self):
@@ -103,10 +109,12 @@ class DiscoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             environment = dict(ARTIFACT_DIR=str(root / 'out'), SHARED_DIR=str(root / 'shared'),
-                               REGISTRY_AUTH_FILE=str(root / 'ci-auth'), NNO_SIGNED_HISTORY_JOBS='manual automatic')
-            def images(architecture, auth, _started):
+                               REGISTRY_AUTH_FILE=str(root / 'ci-auth'), NNO_SIGNED_HISTORY_JOBS='manual automatic',
+                               CLUSTER_PROFILE_DIR=str(root / 'profile'))
+            def images(architecture, auth, _started, profile):
                 self.assertEqual(architecture, 'amd64')
                 self.assertEqual(auth, root / 'ci-auth')
+                self.assertEqual(profile, root / 'profile')
                 return []
             def history(_images, _started, jobs):
                 self.assertEqual(jobs, ['manual', 'automatic'])
@@ -173,6 +181,40 @@ class DiscoveryTests(unittest.TestCase):
             'data.repositories.repository', 'data.repositories.push_date', 'data.repositories.tags.name',
             'data.repositories.manifest_list_digest'})
         configs.assert_called_once_with(IMAGE_RECORD['repository'] + '@' + A, 'auth')
+
+    def test_staging_catalog_reads_pages_on_lab_and_config_digests_locally(self):
+        record = self.catalog_record()
+        profile = Path('profile')
+        remote = unittest.mock.Mock(side_effect=[dict(total=2, data=[record]), dict(total=2, data=[record])])
+        configs = unittest.mock.Mock(return_value=B)
+        direct = unittest.mock.Mock(side_effect=AssertionError('CI must not query the staging catalog directly'))
+        with patch.dict(GLOBALS, lab_json=remote, get_json=direct, config_digest=configs):
+            self.assertEqual(d.recent_images('amd64', 'auth', NOW, profile), [IMAGE_RECORD])
+        self.assertEqual(remote.call_count, 2)
+        for page, call in enumerate(remote.call_args_list):
+            self.assertEqual(len(call[0]), 2)
+            self.assertEqual(call[0][0], profile)
+            self.assertTrue(call[0][1].startswith(d.CATALOG_API + '?'))
+            self.assertEqual(parse_qs(urlparse(call[0][1]).query)['page'], [str(page)])
+        direct.assert_not_called()
+        configs.assert_called_once_with(IMAGE_RECORD['repository'] + '@' + A, 'auth')
+
+    def test_remote_staging_catalog_failure_fails_without_handoffs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            argv = ['discover', '--cluster-profile-dir', str(root / 'profile'),
+                    '--output-dir', str(root / 'out'), '--shared-dir', str(root / 'shared')]
+            remote = unittest.mock.Mock(side_effect=ValueError('Lab curl request failed'))
+            with patch('sys.argv', argv), patch.dict(
+                    GLOBALS, lab_json=remote, get_json=unittest.mock.Mock(side_effect=AssertionError('unexpected HTTP'))):
+                self.assertEqual(d.main(), 1)
+            self.assertEqual(remote.call_args[0][0], root / 'profile')
+            self.assertEqual(len(remote.call_args[0]), 2)
+            self.assertEqual(json.loads((root / 'shared/nno-discovery-result.json').read_text())['outcome'], 'failed')
+            for name in ['skip-work-steps', 'dpf-openshift-version', 'ofed-pullspec',
+                         'nno-doca2-signed-request.json', 'nno-selected-request.json']:
+                for folder in ['out', 'shared']:
+                    self.assertFalse((root / folder / name).exists())
 
     def test_catalog_aliases_share_config_lookup_and_identity(self):
         tag = IMAGE.rsplit(':', 1)[1]
