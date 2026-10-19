@@ -153,7 +153,7 @@ def attempted(images, scan_started, jobs):
     return tried, unfinished
 
 
-def recent_images(architecture, auth_file, scan_started):
+def recent_images(architecture, auth_file, scan_started, cluster_profile_dir=None):
     since = scan_started - timedelta(days=7)
     params = dict(
         filter=f'repositories.registry=={CATALOG_REGISTRY};'
@@ -166,7 +166,8 @@ def recent_images(architecture, auth_file, scan_started):
                 'data.repositories.manifest_list_digest')
     records = []
     for page in range(CATALOG_MAX_PAGES):
-        response = get_json(CATALOG_API + '?' + urlencode(dict(params, page=page)))
+        url = CATALOG_API + '?' + urlencode(dict(params, page=page))
+        response = lab_json(cluster_profile_dir, url) if cluster_profile_dir else get_json(url)
         if (not isinstance(response, dict) or type(response.get('total')) is not int
                 or response['total'] < 0 or not isinstance(response.get('data'), list)):
             raise ValueError('invalid catalog response')
@@ -234,8 +235,11 @@ def release_stream_urls(architecture):
             'https://multi.ocp.releases.ci.openshift.org/api/v1/releasestream/4-stable-multi/tags']
 
 
-def installer_versions(profile, url):
-    """Read catalog JSON through the server's aicli account, without its token."""
+def lab_json(profile, url, helper=None):
+    """Read JSON through lab curl, or a named helper when server-side auth is needed."""
+    remote = ['python3', '-', url] if helper else [
+        'curl', '--fail', '--silent', '--show-error', '--max-time', '60', '--', url]
+    source = helper or 'curl'
     with tempfile.TemporaryDirectory(prefix='nno-discovery-') as directory:
         key = Path(directory) / 'id_rsa'
         encoded = b''.join((profile / 'private-key').read_bytes().split())
@@ -245,18 +249,23 @@ def installer_versions(profile, url):
         result = subprocess.run(
             ['ssh', '-i', str(key), '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=30',
              '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null',
-             '-o', 'LogLevel=ERROR', 'root@' + host, shlex.join(['python3', '-', url])],
-            input=Path(__file__).with_name('assisted-versions.py').read_bytes(),
+             '-o', 'LogLevel=ERROR', 'root@' + host, shlex.join(remote)],
+            input=Path(__file__).with_name(helper).read_bytes() if helper else b'',
             capture_output=True, timeout=120, check=False)
         if result.returncode:
-            raise ValueError('Unable to read the lab Assisted version catalog')
+            raise ValueError(f'Unable to read lab JSON using {source}')
         try:
-            versions = json.loads(result.stdout)
+            data = json.loads(result.stdout)
         except ValueError as error:
-            raise ValueError('Lab Assisted version catalog is not valid JSON') from error
-        if not isinstance(versions, dict):
-            raise ValueError('Lab Assisted version catalog must be a JSON object')
-        return versions
+            raise ValueError(f'Lab {source} response is not valid JSON') from error
+        if not isinstance(data, dict):
+            raise ValueError(f'Lab {source} response must be a JSON object')
+        return data
+
+
+def installer_versions(profile, url):
+    """Read Assisted versions without moving the server's token into CI."""
+    return lab_json(profile, url, 'assisted-versions.py')
 
 
 def release_order(release):
@@ -383,7 +392,7 @@ def main():
                  'dpf-openshift-version', 'ofed-pullspec', 'skip-work-steps']
         if any((directory / name).exists() for directory in (args.output_dir, args.shared_dir) for name in names):
             raise ValueError('discovery requires fresh output and signed handoff directories')
-        images = recent_images(args.architecture, args.registry_auth_file, started)
+        images = recent_images(args.architecture, args.registry_auth_file, started, args.cluster_profile_dir)
         tried, unfinished = attempted(images, started, args.signed_job)
         result.update(outcome='no_work', reason='unfinished_signed_build' if unfinished else 'no_eligible_image')
         images = [image for image in images if identity(image) not in tried]
