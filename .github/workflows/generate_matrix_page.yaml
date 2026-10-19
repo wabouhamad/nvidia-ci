@@ -130,7 +130,9 @@ jobs:
             echo "Generating GPU Operator dashboard..."
             PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.generate_ci_dashboard \
               --dashboard_data_filepath "${{ env.DASHBOARD_DATA_FILEPATH }}" \
-              --dashboard_html_filepath "${{ env.DASHBOARD_HTML_FILEPATH }}"
+              --dashboard_html_filepath "${{ env.DASHBOARD_HTML_FILEPATH }}" \
+              --sibling-url "gpu_operator_signed_matrix.html" \
+              --sibling-label "Precompiled/Signed"
           fi
 
           if [ "$SIGNED_CHANGED" = true ]; then
@@ -138,7 +140,9 @@ jobs:
             PYTHONPATH=.github/scripts python -m gpu_operator_dashboard.generate_ci_dashboard \
               --dashboard_data_filepath "${{ env.SIGNED_DASHBOARD_DATA_FILEPATH }}" \
               --dashboard_html_filepath "${{ env.SIGNED_DASHBOARD_HTML_FILEPATH }}" \
-              --title "Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift (precompiled/signed)"
+              --title "Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift (precompiled/signed)" \
+              --sibling-url "gpu_operator_matrix.html" \
+              --sibling-label "Standard"
           fi
 
           if [ "$NNO_CHANGED" = true ]; then

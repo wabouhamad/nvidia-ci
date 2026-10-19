@@ -3,7 +3,8 @@ from unittest.mock import patch
 from datetime import datetime, timezone
 
 from gpu_operator_dashboard.generate_ci_dashboard import (
-    build_bundle_info, build_catalog_table_rows, has_valid_semantic_versions, generate_test_matrix)
+    build_bundle_info, build_catalog_table_rows, build_topbar,
+    has_valid_semantic_versions, generate_test_matrix)
 from gpu_operator_dashboard.fetch_ci_data import (
     OCP_FULL_VERSION, GPU_OPERATOR_VERSION, DRIVER_BRANCH,
     STATUS_ABORTED, STATUS_SUCCESS, STATUS_FAILURE)
@@ -729,6 +730,66 @@ class TestDriverBranchRendering(TestCase):
 
         self.assertNotIn("580.173.02", html)
         self.assertNotIn("615.71.09", html)
+
+
+class TestSiblingLink(TestCase):
+    """Test cases for the sibling link (standard/signed toggle)."""
+
+    def test_sibling_link_with_url_and_label(self):
+        """Test that sibling link generates correct HTML."""
+        result = build_topbar("gpu_operator_signed_matrix.html", "Precompiled/Signed")
+        self.assertIn('href="gpu_operator_signed_matrix.html"', result)
+        self.assertIn("View Precompiled/Signed matrix", result)
+
+    def test_sibling_link_empty_url(self):
+        """Test that empty sibling URL omits the sibling link but keeps external links."""
+        result = build_topbar("", "Precompiled/Signed")
+        self.assertNotIn("View Precompiled/Signed matrix", result)
+        self.assertIn("Driver delivery (VPN)", result)
+
+    def test_sibling_link_empty_label(self):
+        """Test that empty sibling label omits the sibling link but keeps external links."""
+        result = build_topbar("gpu_operator_signed_matrix.html", "")
+        self.assertNotIn("View", result)
+        self.assertIn("Driver delivery (VPN)", result)
+
+    def test_sibling_link_escapes_html(self):
+        """Test that sibling link properly escapes HTML special characters."""
+        result = build_topbar("file.html", 'Label with "quotes" & <brackets>')
+        self.assertNotIn('"quotes"', result)
+        self.assertNotIn("<brackets>", result)
+        self.assertIn("&amp;", result)
+
+    @patch('gpu_operator_dashboard.generate_ci_dashboard.load_template')
+    def test_generate_test_matrix_with_sibling_link(self, mock_load_template):
+        """Test that generate_test_matrix injects the sibling link into the header."""
+        mock_load_template.side_effect = [
+            '<html><head><title>Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift</title></head><body><h2>Test Matrix: NVIDIA GPU Operator on Red Hat OpenShift</h2>{sibling_link}',
+            '<div id="ocp-{ocp_key}"><h2>{ocp_key}</h2>{notes}{table_rows}{bundle_info}{extra_headers}</div>',
+            '<div class="footer">Last updated: {LAST_UPDATED}</div></body></html>'
+        ]
+
+        ocp_data = {
+            '4.14': {
+                'notes': [],
+                'bundle_tests': [],
+                'release_tests': [{
+                    OCP_FULL_VERSION: '4.14.1',
+                    GPU_OPERATOR_VERSION: '23.9.0',
+                    'test_status': STATUS_SUCCESS,
+                    'prow_job_url': 'https://example.com/job1',
+                    'job_timestamp': '1712345678'
+                }]
+            }
+        }
+
+        html_result = generate_test_matrix(
+            ocp_data,
+            sibling_url="gpu_operator_signed_matrix.html",
+            sibling_label="Precompiled/Signed"
+        )
+        self.assertIn('href="gpu_operator_signed_matrix.html"', html_result)
+        self.assertIn("View Precompiled/Signed matrix", html_result)
 
 
 if __name__ == '__main__':
