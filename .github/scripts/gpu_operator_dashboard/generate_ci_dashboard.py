@@ -23,7 +23,8 @@ TOPBAR_LINKS = [
 
 
 def build_topbar(sibling_url: str, sibling_label: str) -> str:
-    """Build a top-right navigation bar with external links and sibling dashboard toggle."""
+    """Build a navigation bar with back link on the left and external links on the right."""
+    back_link = '<a href="index.html" style="color:#009688; text-decoration:underline; text-underline-offset:2px;">&#8592; Back</a>'
     links = []
     for url, label in TOPBAR_LINKS:
         safe_url = html.escape(url, quote=True)
@@ -37,11 +38,9 @@ def build_topbar(sibling_url: str, sibling_label: str) -> str:
         links.append(
             f'<a href="{safe_url}" style="color:#009688; text-decoration:underline; text-underline-offset:2px;">'
             f'View {safe_label} matrix →</a>')
-    if not links:
-        return ""
     return (
-        f'  <div style="display:flex; justify-content:flex-end; gap:20px; margin-bottom:10px; font-size:14px;">'
-        f'{"".join(links)}</div>'
+        f'  <div style="display:flex; justify-content:space-between; gap:20px; margin-bottom:10px; font-size:14px;">'
+        f'{back_link}<span style="display:flex; gap:20px;">{"".join(links)}</span></div>'
     )
 
 
