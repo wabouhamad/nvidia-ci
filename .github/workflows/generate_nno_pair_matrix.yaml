@@ -85,7 +85,7 @@ jobs:
           echo 'No NNO report artifacts were found in the public Prow bucket.' >&2
           exit 1
 
-      - name: Render matrix reports and site index
+      - name: Render matrix reports
         if: steps.report_data.outputs.has_data == 'true'
         shell: bash
         run: |
@@ -95,9 +95,6 @@ jobs:
             --output-dir "$REPORT_OUTPUT" \
             --label 'Prow job history'
           cp "$RUNNER_TEMP/nno-pair-report/history.json" "$REPORT_OUTPUT/nno_doca2_history.json"
-          python3 .github/scripts/nno_pair_report/update_index.py \
-            --source nno-pages-baseline/index.html \
-            --output "$REPORT_OUTPUT/index.html"
 
       - name: Check whether published files changed
         id: publish_diff
