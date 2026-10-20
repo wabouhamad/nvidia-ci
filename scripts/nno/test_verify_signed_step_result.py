@@ -17,6 +17,7 @@ WORKERS = ["rdma-client", "rdma-server"]
 DIGEST = "sha256:" + "a" * 64
 REPORT = {
     "step": STEP, "attempt": "this-invocation", "status": "passed", "ocp_version": "4.22.15",
+    "nno_csv_version": "26.7.0-1",
     "checks": dict.fromkeys(["requested_driver_policy", "requested_driver_running", "rdma_gpudirect"], "passed"),
     "precompiled_selection": {"pull_spec": IMAGE, "kernel_version": KERNEL, "architecture": "amd64"},
     "configured_ofed_driver": {"image_id": IMAGE.split(":")[0] + "@" + DIGEST},
@@ -55,6 +56,19 @@ class ResultTests(unittest.TestCase):
             report["checks"][check] = "not_run"
             with self.subTest(check=check), self.assertRaises(ValueError):
                 self.invoke(report=report)
+
+    def test_nno_csv_must_match_the_image_release_in_each_signed_stage(self):
+        for version, passes in [("26.7.0-1", True), ("26.7.1", True), ("26.7.1+build.2", True),
+                                ("26.4.1-1", False), ("26.70.0", False), ("26.7", False),
+                                ("", False), (None, False)]:
+            report = copy.deepcopy(REPORT)
+            report["nno_csv_version"] = version
+            with self.subTest(version=version):
+                if passes:
+                    self.invoke(report=report)
+                else:
+                    with self.assertRaisesRegex(ValueError, "NNO CSV"):
+                        self.invoke(report=report)
 
     def test_installer_suffixes_preserve_exact_release_version(self):
         for requested, observed, passes in [

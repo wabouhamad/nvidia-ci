@@ -246,7 +246,7 @@ class DiscoveryTests(unittest.TestCase):
 
     def test_catalog_different_tags_keep_distinct_rebuilds_oldest_first(self):
         tag = IMAGE.rsplit(':', 1)[1]
-        new = self.catalog_record(manifest=C, tags=['rebuilt-' + tag])
+        new = self.catalog_record(manifest=C, tags=[tag.replace('-' + KERNEL, '-rebuild-1-' + KERNEL)])
         old = self.catalog_record(age=1)
         images, _, configs = self.catalog_images([new, old])
         self.assertEqual([image['manifest_digest'] for image in images], [A, C])
@@ -724,6 +724,41 @@ class DiscoveryTests(unittest.TestCase):
                     request = json.loads((root / 'shared/nno-doca2-signed-request.json').read_text())
                     self.assertEqual(len(request['pairs']), 1)
                     self.assertEqual(request['pairs'][0]['driver_requested']['image'], IMAGE)
+
+    def test_unsupported_nno_channels_are_skipped_before_selection(self):
+        unsupported = IMAGE.replace('26.07', '26.08')
+        for has_supported in (True, False):
+            with self.subTest(has_supported=has_supported), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                records = [self.catalog_record(manifest=C, age=1, tags=[unsupported.rsplit(':', 1)[1]])]
+                if has_supported:
+                    records.append(self.catalog_record())
+                argv = ['discover', '--registry-auth-file', 'auth', '--release-auth-file', 'auth',
+                        '--output-dir', str(root / 'out'), '--shared-dir', str(root / 'shared')]
+                clock = unittest.mock.Mock(wraps=datetime)
+                clock.now.return_value = NOW
+                configs = unittest.mock.Mock(return_value=B)
+                releases = unittest.mock.Mock(return_value=[RELEASE])
+                release_for = unittest.mock.Mock(return_value=RELEASE)
+                with patch('sys.argv', argv), patch.dict(
+                        GLOBALS, get_json=lambda *a: dict(total=len(records), data=records),
+                        datetime=clock, config_digest=configs, attempted=lambda *a: (set(), False),
+                        releases=releases, release_for=release_for,
+                        image_info=lambda image, *a: dict(manifest_digest=C if image == unsupported else A)):
+                    self.assertEqual(d.main(), 0)
+                result = json.loads((root / 'shared/nno-discovery-result.json').read_text())
+                self.assertEqual(result['outcome'], 'selected' if has_supported else 'no_work')
+                self.assertEqual((root / 'shared/skip-work-steps').exists(), not has_supported)
+                if has_supported:
+                    self.assertEqual(result['selected']['image'], IMAGE)
+                    self.assertEqual(release_for.call_args.args[0]['image'], IMAGE)
+                    self.assertEqual(release_for.call_count, 1)
+                    configs.assert_called_once_with(IMAGE_RECORD['repository'] + '@' + A, Path('auth'))
+                else:
+                    configs.assert_not_called()
+                    releases.assert_not_called()
+                    release_for.assert_not_called()
+                    self.assertFalse((root / 'shared/ofed-pullspec').exists())
 
     def test_selection_handoff_and_invocation_checks_need_no_auth(self):
         with tempfile.TemporaryDirectory() as directory:

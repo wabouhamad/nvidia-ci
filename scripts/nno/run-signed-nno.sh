@@ -41,6 +41,7 @@ if [[ -z "${NVIDIANETWORK_OFED_DRIVER_PULLSPEC}" ]]; then
   exit 1
 fi
 # Apply the explicit image after the profile so its defaults cannot replace it.
+export NVIDIANETWORK_DEPLOY_FROM_BUNDLE=false
 unset NVIDIANETWORK_OFED_DRIVER_VERSION NVIDIANETWORK_OFED_REPOSITORY
 export NVIDIANETWORK_USE_PRECOMPILED_OFED=true
 export TEST_FEATURES=nvidianetwork
@@ -53,6 +54,9 @@ export NVIDIANETWORK_RDMA_GPUDIRECT="${gpudirect}"
 export NNO_STEP_NAME="network-operator-e2e-signed-${1}"
 NNO_STEP_ATTEMPT="${BUILD_ID:-local}-$(date +%s)-$$"
 export NNO_STEP_ATTEMPT
-python3 scripts/nno/verify-signed-step-result.py --preflight
+# Preflight validates the existing handoff and returns the image-derived channel.
+NVIDIANETWORK_SUBSCRIPTION_CHANNEL="$(python3 scripts/nno/verify-signed-step-result.py --preflight)"
+export NVIDIANETWORK_SUBSCRIPTION_CHANNEL
+echo "Signed NNO subscription channel: ${NVIDIANETWORK_SUBSCRIPTION_CHANNEL}"
 make run-tests
 python3 scripts/nno/verify-signed-step-result.py

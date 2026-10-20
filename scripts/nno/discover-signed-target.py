@@ -16,7 +16,7 @@ from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
-from signed_images import (command, config_digest, digest, error_message, identity, image_info, metadata,
+from signed_images import (command, config_digest, digest, error_message, identity, image_info, metadata, nno_channel,
                            release_info, rpm_info, runtime_digests, strip_installer_suffix, toolkit_info, version_re)
 
 STAGE_REGISTRY = 'registry.stage.redhat.io'
@@ -198,6 +198,7 @@ def recent_images(architecture, auth_file, scan_started, cluster_profile_dir=Non
                 pull_spec = STAGE_REGISTRY + '/' + entry['repository'] + ':' + tag['name']
                 try:
                     image = metadata(pull_spec)
+                    nno_channel(pull_spec)
                 except ValueError:
                     continue
                 if image['architecture'] != architecture:
