@@ -231,9 +231,11 @@ def get_all_results(job_limit: int) -> Dict[str, List[Dict[str, Any]]]:
     logger.info("Fetching job results")
 
     periodic_cutoff_diff = datetime.timedelta(days=60) # Most recent periodic job must be older than 60 days in order to inspect presubmits.
+    max_consecutive_empty_versions = 3
     fin_results = {}
     start = time.time()
     got_results_for_at_least_one_version = False
+    consecutive_empty_versions = 0
     durations = dict[str, float]()
 
     # To make the script easier to maintain, we start with oldest version and go up until there are no jobs detected.
@@ -243,11 +245,6 @@ def get_all_results(job_limit: int) -> Dict[str, List[Dict[str, Any]]]:
         version = f"4.{minor}"
         periodic_runs = get_job_runs_for_version(version, job_limit)
         logger.info(f"[{version}] Found {len(periodic_runs)} periodic job runs")
-
-        # Pretty soon, there will be no periodic job results for 4.14 but that should not cause the procedure to stop immediately.
-        if len(periodic_runs) == 0 and got_results_for_at_least_one_version:
-            logger.info(f"[{version}] Assuming that {version} is not being developed yet - stopping collecting the results")
-            break
 
         results = []
         for periodic_run in periodic_runs:
@@ -282,7 +279,15 @@ def get_all_results(job_limit: int) -> Dict[str, List[Dict[str, Any]]]:
 
         if results:
             got_results_for_at_least_one_version = True
+            consecutive_empty_versions = 0
             fin_results[version] = results
+        elif got_results_for_at_least_one_version:
+            consecutive_empty_versions += 1
+            logger.info(f"[{version}] No results from any source ({consecutive_empty_versions}/{max_consecutive_empty_versions} consecutive empty versions)")
+            if consecutive_empty_versions >= max_consecutive_empty_versions:
+                logger.info(f"[{version}] Reached {max_consecutive_empty_versions} consecutive versions with no results - stopping collecting the results")
+                durations[version] = f"{time.time() - start_version:.0f}s"
+                break
         durations[version] = f"{time.time() - start_version:.0f}s"
 
     duration = time.time() - start
