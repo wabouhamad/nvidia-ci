@@ -5,6 +5,8 @@ import (
 	"net/url"
 )
 
+const socks5Scheme = "socks5"
+
 // proxyForClientGo returns a proxy function that is compatible with all of
 // client-go's transports, including the SPDY transport used by pod exec.
 //
@@ -25,7 +27,7 @@ func proxyForClientGo(proxy func(*http.Request) (*url.URL, error)) func(*http.Re
 		}
 
 		compatibleURL := *proxyURL
-		compatibleURL.Scheme = "socks5"
+		compatibleURL.Scheme = socks5Scheme
 
 		return &compatibleURL, nil
 	}

@@ -20,8 +20,8 @@ func TestProxyForClientGoConvertsSocks5h(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Scheme != "socks5" {
-		t.Fatalf("proxy scheme = %q, want socks5", got.Scheme)
+	if got.Scheme != socks5Scheme {
+		t.Fatalf("proxy scheme = %q, want %s", got.Scheme, socks5Scheme)
 	}
 	if proxyURL.Scheme != "socks5h" {
 		t.Fatalf("input proxy scheme was changed to %q", proxyURL.Scheme)
@@ -37,7 +37,7 @@ func TestProxyForClientGoUsesEnvironmentWhenProxyIsNil(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got == nil || got.Scheme != "socks5" {
+	if got == nil || got.Scheme != socks5Scheme {
 		t.Fatalf("proxy = %v, want socks5 proxy normalized to socks5", got)
 	}
 }
