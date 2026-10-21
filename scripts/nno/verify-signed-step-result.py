@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import sys
 
-from signed_images import error_message, metadata, runtime_digests, strip_installer_suffix
+from signed_images import error_message, metadata, nno_channel, nno_version_matches, runtime_digests, strip_installer_suffix
 
 
 def selected_image(shared, request):
@@ -37,6 +37,7 @@ def image_digest(image_id):
 def verify(artifact_dir, step, attempt, request, workers):
     pair = request["pairs"][0]
     driver = pair["driver_requested"]
+    channel = nno_channel(driver["image"])
     tagged = metadata(driver["image"])
     # Installer packaging is absent from ClusterVersion; retain release prereleases.
     requested_version = strip_installer_suffix(pair["openshift_version"])
@@ -49,6 +50,8 @@ def verify(artifact_dir, step, attempt, request, workers):
     for report in reports:
         if report.get("status") != "passed" or any(report.get("checks", {}).get(check) != "passed" for check in required):
             raise ValueError(f"signed step {step} did not pass all required driver/test checks")
+        if not nno_version_matches(channel, report.get("nno_csv_version")):
+            raise ValueError(f"installed NNO CSV {report.get('nno_csv_version')!r} does not match requested channel {channel}")
         selection = report.get("precompiled_selection") or {}
         if report.get("ocp_version") != requested_version or selection.get("pull_spec") != driver["image"]:
             raise ValueError("result does not prove the requested exact OCP version and image")
@@ -80,12 +83,16 @@ if __name__ == "__main__":
         shared = Path(os.environ["SHARED_DIR"])
         request = json.loads((shared / "nno-doca2-signed-request.json").read_text())
         pair = request["pairs"][0]
+        channel = nno_channel(pair["driver_requested"]["image"])
         if (shared / "dpf-openshift-version").read_text().strip() != pair["openshift_version"] or \
                 (shared / "ofed-pullspec").read_text().strip() != pair["driver_requested"]["image"]:
             raise ValueError("shared handoff does not match the normalized request")
         selected = selected_image(shared, request)
         if sys.argv[1:] == ["--preflight"]:
+            print(channel)
             sys.exit(0)
+        if os.environ.get("NVIDIANETWORK_SUBSCRIPTION_CHANNEL") != channel:
+            raise ValueError("NNO subscription channel does not match the staging driver release")
         observed = verify(os.environ["ARTIFACT_DIR"], os.environ["NNO_STEP_NAME"], os.environ["NNO_STEP_ATTEMPT"], request,
                           [os.environ["NVIDIANETWORK_RDMA_CLIENT_HOSTNAME"], os.environ["NVIDIANETWORK_RDMA_SERVER_HOSTNAME"]])
         if selected and not observed <= runtime_digests(selected):

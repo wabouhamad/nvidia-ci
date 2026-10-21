@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from signed_images import architecture_re, digest_re, image_re, pair_id_re, tag_re, version_re
+from signed_images import architecture_re, digest_re, image_re, nno_channel, pair_id_re, tag_re, version_re
 
 
 def fail(message):
@@ -65,6 +65,10 @@ def main():
     tag_match = tag_re.fullmatch(image_match.group("tag"))
     if tag_match is None:
         fail("driver_requested.image tag is incomplete; it must include the OFED version, kernel, NFD os_release-based OS tag and architecture")
+    try:
+        channel = nno_channel(image)
+    except ValueError as error:
+        fail(str(error))
 
     expected_kernel = driver.get("kernel", "")
     if expected_kernel is not None and not isinstance(expected_kernel, str):
@@ -143,7 +147,7 @@ def main():
     request_json = json.dumps(normalized, indent=2, sort_keys=True) + "\n"
     (shared / "nno-doca2-signed-request.json").write_text(request_json, encoding="utf-8")
     (artifacts / "nno-doca2-signed-request.json").write_text(request_json, encoding="utf-8")
-    print("signed target pair=%s openshift_version=%s image=%s" % (pair_id, version, image))
+    print("signed target pair=%s openshift_version=%s nno_channel=%s image=%s" % (pair_id, version, channel, image))
 
 
 if __name__ == "__main__":

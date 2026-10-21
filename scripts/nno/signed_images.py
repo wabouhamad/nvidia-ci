@@ -51,6 +51,24 @@ def metadata(image):
                 os_tag=tag['os_tag'], architecture=tag['architecture'], rhel_major=match['image'].removeprefix('doca-driver-rhel'))
 
 
+def nno_channel(image):
+    """CI policy: test a signed driver with its matching quarterly NNO channel."""
+    match = image_re.fullmatch(image)
+    tag = tag_re.fullmatch(match['tag']) if match else None
+    release = re.fullmatch(r'(?:doca[0-9]+\.[0-9]+\.[0-9]+-)?([0-9]{2})\.(01|04|07|10)-.+',
+                           tag['version']) if tag else None
+    if not release:
+        raise ValueError(f'cannot derive an NNO release channel from staging driver image: {image}')
+    return f'v{int(release[1])}.{int(release[2])}'
+
+
+def nno_version_matches(channel, version):
+    """Match a complete CSV version, retaining its patch and packaging suffix."""
+    return (isinstance(channel, str) and re.fullmatch(r'v[0-9]+\.[0-9]+', channel) is not None
+            and isinstance(version, str)
+            and re.fullmatch(re.escape(channel[1:]) + r'\.[0-9]+(?:-[A-Za-z0-9][A-Za-z0-9.-]*)?(?:\+[A-Za-z0-9.-]+)?', version) is not None)
+
+
 def digest(value):
     if not isinstance(value, str) or not digest_re.fullmatch(value):
         raise ValueError(f"invalid image digest: {value!r}")

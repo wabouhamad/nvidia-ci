@@ -22,6 +22,7 @@ step, attempt = os.environ['NNO_STEP_NAME'], os.environ['NNO_STEP_ATTEMPT']
 pair = json.loads((Path(os.environ['SHARED_DIR']) / 'nno-doca2-signed-request.json').read_text())['pairs'][0]
 check = 'rdma_gpudirect' if step.endswith('gpudirect') else 'nic_cluster_policy_ready'
 result = {'step': step, 'attempt': attempt, 'status': 'passed', 'ocp_version': pair['openshift_version'],
+          'nno_csv_version': os.environ.get('MOCK_NNO_CSV', '26.7.0-1'),
           'checks': dict.fromkeys(['requested_driver_policy', 'requested_driver_running', check], 'passed'),
           'precompiled_selection': {'pull_spec': os.environ['NVIDIANETWORK_OFED_DRIVER_PULLSPEC'],
               'kernel_version': pair['driver_requested']['kernel'], 'architecture': 'amd64'},
@@ -48,6 +49,8 @@ class SignedInvocationTests(unittest.TestCase):
             'NVIDIANETWORK_OFED_REPOSITORY=profile-repository\n'
             'NVIDIANETWORK_OFED_DRIVER_PULLSPEC=profile-image\n'
             'NVIDIANETWORK_USE_PRECOMPILED_OFED=false\n'
+            'NVIDIANETWORK_SUBSCRIPTION_CHANNEL=stable\n'
+            'NVIDIANETWORK_DEPLOY_FROM_BUNDLE=true\n'
             'NVIDIANETWORK_RDMA_CLIENT_HOSTNAME=rdma-client\n'
             'NVIDIANETWORK_RDMA_SERVER_HOSTNAME=rdma-server\n')
         self.capture = self.root / "capture.json"
@@ -79,6 +82,8 @@ class SignedInvocationTests(unittest.TestCase):
             self.assertNotIn("NVIDIANETWORK_OFED_DRIVER_VERSION", env)
             self.assertNotIn("NVIDIANETWORK_OFED_REPOSITORY", env)
             self.assertEqual(env["NVIDIANETWORK_USE_PRECOMPILED_OFED"], "true")
+            self.assertEqual(env["NVIDIANETWORK_SUBSCRIPTION_CHANNEL"], "v26.7")
+            self.assertEqual(env["NVIDIANETWORK_DEPLOY_FROM_BUNDLE"], "false")
             self.assertEqual(env["TEST_LABELS"], label)
             self.assertEqual(env["NVIDIANETWORK_RDMA_GPUDIRECT"], gpudirect)
 
@@ -101,6 +106,27 @@ class SignedInvocationTests(unittest.TestCase):
         (self.profile / "nno-e2e-env").unlink()
         self.assertNotEqual(self.invoke("deploy").returncode, 0)
         self.assertFalse(self.capture.exists())
+
+    def test_real_26_04_request_overrides_a_newer_profile_release(self):
+        with (self.profile / "nno-e2e-env").open("a") as profile:
+            profile.write("NVIDIANETWORK_SUBSCRIPTION_CHANNEL=v26.7\n")
+        request = json.loads(json.dumps(REQUEST))
+        request["pairs"][0]["driver_requested"]["image"] = IMAGE.replace("26.07-0.7.7.0", "26.04-1.1.0.0")
+        matrix = self.root / "request.json"
+        matrix.write_text(json.dumps(request))
+        subprocess.run([sys.executable, str(VALIDATOR), "--matrix", str(matrix),
+                        "--shared-dir", self.env["SHARED_DIR"], "--artifact-dir", self.env["ARTIFACT_DIR"]],
+                       check=True, capture_output=True)
+        for stage in ["deploy", "gpudirect"]:
+            self.env["MOCK_NNO_CSV"] = "26.4.1-1"
+            result = self.invoke(stage)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            env = json.loads(self.capture.read_text())["env"]
+            self.assertEqual(env["NVIDIANETWORK_SUBSCRIPTION_CHANNEL"], "v26.4")
+            self.env["MOCK_NNO_CSV"] = "26.7.0-1"
+            result = self.invoke(stage)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("does not match requested channel v26.4", result.stderr)
 
     def test_successful_make_without_test_evidence_fails(self):
         self.env["MOCK_NO_REPORT"] = "true"
