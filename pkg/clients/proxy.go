@@ -5,7 +5,10 @@ import (
 	"net/url"
 )
 
-const socks5Scheme = "socks5"
+const (
+	socks5hScheme = "socks5h"
+	socks5Scheme  = "socks5"
+)
 
 // proxyForClientGo returns a proxy function that is compatible with all of
 // client-go's transports, including the SPDY transport used by pod exec.
@@ -15,14 +18,24 @@ const socks5Scheme = "socks5"
 // local listener as "socks5h" to request proxy-side DNS resolution. The
 // SOCKS5 dialer used by client-go already sends the original host name to the
 // proxy, so these schemes are equivalent for this client.
-func proxyForClientGo(proxy func(*http.Request) (*url.URL, error)) func(*http.Request) (*url.URL, error) {
+func proxyForClientGo(proxy func(*http.Request) (*url.URL, error), host string) func(*http.Request) (*url.URL, error) {
 	if proxy == nil {
 		proxy = http.ProxyFromEnvironment
 	}
 
+	request, err := http.NewRequest(http.MethodGet, host, nil)
+	if err != nil {
+		return nil
+	}
+
+	proxyURL, err := proxy(request)
+	if err != nil || proxyURL == nil || proxyURL.Scheme != socks5hScheme {
+		return nil
+	}
+
 	return func(request *http.Request) (*url.URL, error) {
 		proxyURL, err := proxy(request)
-		if err != nil || proxyURL == nil || proxyURL.Scheme != "socks5h" {
+		if err != nil || proxyURL == nil || proxyURL.Scheme != socks5hScheme {
 			return proxyURL, err
 		}
 

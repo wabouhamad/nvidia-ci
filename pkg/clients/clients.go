@@ -89,7 +89,9 @@ func New(kubeconfig string) *Settings {
 
 	// Keep the proxy behavior from the kubeconfig/environment while making
 	// socks5h usable by client-go's SPDY pod exec transport.
-	config.Proxy = proxyForClientGo(config.Proxy)
+	if proxy := proxyForClientGo(config.Proxy, config.Host); proxy != nil {
+		config.Proxy = proxy
+	}
 
 	clientSet := &Settings{}
 	clientSet.CoreV1Interface = coreV1Client.NewForConfigOrDie(config)
