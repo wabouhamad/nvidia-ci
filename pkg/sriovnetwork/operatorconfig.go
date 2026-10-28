@@ -208,6 +208,33 @@ func (builder *SriovOperatorConfigBuilder) Update() (*SriovOperatorConfigBuilder
 	return builder, nil
 }
 
+// Patch sends a merge patch computed against original, applying only the fields that
+// builder.Definition changed relative to it. Unlike Update, this does not replace the whole
+// spec, so fields of the real upstream SriovOperatorConfigSpec that this package's trimmed local
+// type does not know about are left untouched on the server.
+func (builder *SriovOperatorConfigBuilder) Patch(
+	original *sriovnetworkapi.SriovOperatorConfig) (*SriovOperatorConfigBuilder, error) {
+	if valid, err := builder.validate(); !valid {
+		return builder, err
+	}
+
+	glog.V(100).Infof("Patching the SriovOperatorConfig object named: %s in namespace %s",
+		builder.Definition.Name, builder.Definition.Namespace)
+
+	err := builder.apiClient.Patch(context.TODO(), builder.Definition, goclient.MergeFrom(original))
+
+	if err != nil {
+		glog.V(100).Infof(msg.FailToUpdateNotification("sriovOperatorConfig", builder.Definition.Name,
+			builder.Definition.Namespace))
+
+		return builder, err
+	}
+
+	builder.Object = builder.Definition
+
+	return builder, nil
+}
+
 // validate will check that the builder and builder definition are properly initialized before
 // accessing any member fields.
 func (builder *SriovOperatorConfigBuilder) validate() (bool, error) {

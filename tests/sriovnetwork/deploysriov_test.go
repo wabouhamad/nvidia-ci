@@ -26,6 +26,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/olm"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/sriovnetwork"
+	sriovnetworkapi "github.com/rh-ecosystem-edge/nvidia-ci/pkg/sriovnetwork/api"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -230,10 +231,16 @@ var _ = Describe("SRIOV", Ordered, Label(tsparams.SriovLabelSuite), func() {
 				sriovOperatorConfigName, sriovNamespace)
 
 			// The SR-IOV Network Operator auto-creates SriovOperatorConfig/default on install, so
-			// pull and update it when present instead of blindly Create()-ing (which would silently
+			// pull and patch it when present instead of blindly Create()-ing (which would silently
 			// no-op and never apply our spec, and would delete the operator's own object on cleanup).
+			// A snapshot of the pre-existing object is kept so the update can be sent as a merge
+			// patch: our local SriovOperatorConfigSpec type is trimmed down from the real upstream
+			// type, so a full Update() would wipe out any upstream spec fields it doesn't know about.
 			operatorConfigPreexisting := operatorConfigBuilder.Exists()
+
+			var operatorConfigOriginal *sriovnetworkapi.SriovOperatorConfig
 			if operatorConfigPreexisting {
+				operatorConfigOriginal = operatorConfigBuilder.Object.DeepCopy()
 				operatorConfigBuilder.Definition = operatorConfigBuilder.Object
 			}
 
@@ -244,7 +251,7 @@ var _ = Describe("SRIOV", Ordered, Label(tsparams.SriovLabelSuite), func() {
 
 			var createdOperatorConfig *sriovnetwork.SriovOperatorConfigBuilder
 			if operatorConfigPreexisting {
-				createdOperatorConfig, err = operatorConfigBuilder.Update()
+				createdOperatorConfig, err = operatorConfigBuilder.Patch(operatorConfigOriginal)
 				Expect(err).ToNot(HaveOccurred(), "error updating SriovOperatorConfig '%s': %v",
 					sriovOperatorConfigName, err)
 			} else {
