@@ -92,7 +92,7 @@ func (in *SriovOperatorConfigList) DeepCopyObject() runtime.Object {
 
 	out := new(SriovOperatorConfigList)
 	out.TypeMeta = in.TypeMeta
-	in.ListMeta.DeepCopyInto(&out.ListMeta)
+	in.DeepCopyInto(&out.ListMeta)
 
 	if in.Items != nil {
 		out.Items = make([]SriovOperatorConfig, len(in.Items))
@@ -216,7 +216,7 @@ func (in *SriovNetworkNodePolicyList) DeepCopyObject() runtime.Object {
 
 	out := new(SriovNetworkNodePolicyList)
 	out.TypeMeta = in.TypeMeta
-	in.ListMeta.DeepCopyInto(&out.ListMeta)
+	in.DeepCopyInto(&out.ListMeta)
 
 	if in.Items != nil {
 		out.Items = make([]SriovNetworkNodePolicy, len(in.Items))
@@ -303,7 +303,7 @@ func (in *SriovNetworkList) DeepCopyObject() runtime.Object {
 
 	out := new(SriovNetworkList)
 	out.TypeMeta = in.TypeMeta
-	in.ListMeta.DeepCopyInto(&out.ListMeta)
+	in.DeepCopyInto(&out.ListMeta)
 
 	if in.Items != nil {
 		out.Items = make([]SriovNetwork, len(in.Items))
@@ -380,7 +380,7 @@ func (in *SriovNetworkNodeStateList) DeepCopyObject() runtime.Object {
 
 	out := new(SriovNetworkNodeStateList)
 	out.TypeMeta = in.TypeMeta
-	in.ListMeta.DeepCopyInto(&out.ListMeta)
+	in.DeepCopyInto(&out.ListMeta)
 
 	if in.Items != nil {
 		out.Items = make([]SriovNetworkNodeState, len(in.Items))
