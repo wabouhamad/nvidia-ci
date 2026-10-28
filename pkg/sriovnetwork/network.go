@@ -10,7 +10,6 @@ import (
 
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/clients"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/msg"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	goclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -135,7 +134,7 @@ func (builder *SriovNetworkBuilder) Exists() bool {
 		glog.V(100).Infof("Failed to collect SriovNetwork object due to %s", err.Error())
 	}
 
-	return err == nil || !k8serrors.IsNotFound(err)
+	return err == nil
 }
 
 // Delete removes a SriovNetwork.

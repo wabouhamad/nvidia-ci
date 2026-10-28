@@ -27,6 +27,7 @@ import (
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/operatorconfig"
 	"github.com/rh-ecosystem-edge/nvidia-ci/pkg/sriovnetwork"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 const (
@@ -63,6 +64,9 @@ var _ = Describe("SRIOV", Ordered, Label(tsparams.SriovLabelSuite), func() {
 	Context("DeploySRIOV", Label("deploy-sriov-network-operator"), func() {
 
 		BeforeAll(func() {
+			Expect(sriovNetworkConfig).ToNot(BeNil(), "failed to load SRIOVNETWORK_* env config")
+			Expect(nfdConfig).ToNot(BeNil(), "failed to load NFD env config")
+
 			if sriovNetworkConfig.CatalogSource == "" {
 				glog.V(sriovparams.LogLevel).Infof("env variable SRIOVNETWORK_CATALOGSOURCE"+
 					" is not set, using default catalogsource '%s'", sriovCatalogSourceDefault)
@@ -83,7 +87,14 @@ var _ = Describe("SRIOV", Ordered, Label(tsparams.SriovLabelSuite), func() {
 
 			sriovNicPresentLabel = fmt.Sprintf("feature.node.kubernetes.io/pci-%s.present", sriovNetworkConfig.NicVendor)
 			sriovNicCapableLabel = fmt.Sprintf("feature.node.kubernetes.io/pci-%s.sriov.capable", sriovNetworkConfig.NicVendor)
-			sriovNodeSelector = map[string]string{sriovNicPresentLabel: "true"}
+			// sriovNodeSelector targets the same nodes the SR-IOV Network Config daemon runs on
+			// (see ConfigDaemonNodeSelector below), so nodes picked by the SriovNetworkNodePolicy
+			// are guaranteed to produce a SriovNetworkNodeState for the sync wait.
+			sriovNodeSelector = map[string]string{
+				"network.nvidia.com/operator.mofed.wait": "false",
+				"node-role.kubernetes.io/worker":         "",
+				sriovNicCapableLabel:                     "true",
+			}
 			sriovPfNames = strings.Split(sriovNetworkConfig.PfNames, ",")
 
 			if nfdConfig.FallbackCatalogSourceIndexImage != "" {
@@ -214,26 +225,38 @@ var _ = Describe("SRIOV", Ordered, Label(tsparams.SriovLabelSuite), func() {
 			Expect(err).ToNot(HaveOccurred(), "error waiting for ClusterServiceVersion '%s' to succeed: %v",
 				sriovCSVName, err)
 
-			By("Create SriovOperatorConfig")
+			By("Create or update SriovOperatorConfig")
 			operatorConfigBuilder := sriovnetwork.NewSriovOperatorConfigBuilder(inittools.APIClient,
 				sriovOperatorConfigName, sriovNamespace)
+
+			// The SR-IOV Network Operator auto-creates SriovOperatorConfig/default on install, so
+			// pull and update it when present instead of blindly Create()-ing (which would silently
+			// no-op and never apply our spec, and would delete the operator's own object on cleanup).
+			operatorConfigPreexisting := operatorConfigBuilder.Exists()
+			if operatorConfigPreexisting {
+				operatorConfigBuilder.Definition = operatorConfigBuilder.Object
+			}
+
 			operatorConfigBuilder.Definition.Spec.EnableInjector = true
 			operatorConfigBuilder.Definition.Spec.EnableOperatorWebhook = true
 			operatorConfigBuilder.Definition.Spec.LogLevel = sriovOperatorConfigLogLevel
-			operatorConfigBuilder.Definition.Spec.ConfigDaemonNodeSelector = map[string]string{
-				"network.nvidia.com/operator.mofed.wait": "false",
-				"node-role.kubernetes.io/worker":         "",
-				sriovNicCapableLabel:                     "true",
-			}
+			operatorConfigBuilder.Definition.Spec.ConfigDaemonNodeSelector = sriovNodeSelector
 
-			createdOperatorConfig, err := operatorConfigBuilder.Create()
-			Expect(err).ToNot(HaveOccurred(), "error creating SriovOperatorConfig '%s': %v",
-				sriovOperatorConfigName, err)
-			glog.V(sriovparams.LogLevel).Infof("Successfully created SriovOperatorConfig '%s'",
+			var createdOperatorConfig *sriovnetwork.SriovOperatorConfigBuilder
+			if operatorConfigPreexisting {
+				createdOperatorConfig, err = operatorConfigBuilder.Update()
+				Expect(err).ToNot(HaveOccurred(), "error updating SriovOperatorConfig '%s': %v",
+					sriovOperatorConfigName, err)
+			} else {
+				createdOperatorConfig, err = operatorConfigBuilder.Create()
+				Expect(err).ToNot(HaveOccurred(), "error creating SriovOperatorConfig '%s': %v",
+					sriovOperatorConfigName, err)
+			}
+			glog.V(sriovparams.LogLevel).Infof("Successfully configured SriovOperatorConfig '%s'",
 				createdOperatorConfig.Definition.Name)
 
 			defer func() {
-				if cleanupAfterTest {
+				if cleanupAfterTest && !operatorConfigPreexisting {
 					_, err := createdOperatorConfig.Delete()
 					Expect(err).ToNot(HaveOccurred())
 				}
@@ -267,7 +290,7 @@ var _ = Describe("SRIOV", Ordered, Label(tsparams.SriovLabelSuite), func() {
 
 			By("Resolve the worker nodes targeted by the SriovNetworkNodePolicy")
 			targetNodeBuilders, err := nodes.List(inittools.APIClient,
-				metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=true", sriovNicPresentLabel)})
+				metav1.ListOptions{LabelSelector: labels.Set(sriovNodeSelector).String()})
 			Expect(err).ToNot(HaveOccurred(), "error listing nodes matching the SriovNetworkNodePolicy "+
 				"nodeSelector: %v", err)
 			Expect(targetNodeBuilders).ToNot(BeEmpty(), "no nodes matched the SriovNetworkNodePolicy nodeSelector")
